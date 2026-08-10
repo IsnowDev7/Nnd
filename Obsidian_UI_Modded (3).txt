@@ -8826,25 +8826,22 @@ function Library:CreateWindow(WindowInfo)
             })
         )
 
-        -- Black glow attached outside the window body
-        local WindowOuterGlow = New("Frame", {
-            BackgroundColor3 = "DarkColor",
-            BackgroundTransparency = 0.5,
-            Position = UDim2.new(0, -8, 0, -8),
-            Size = UDim2.new(1, 16, 1, 16),
+        -- Soft outer glow / drop shadow attached to window body outside
+        local WindowOuterGlow = New("ImageLabel", {
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://6014261993",
+            ImageColor3 = "DarkColor",
+            ImageTransparency = 0.4,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49, 49, 450, 450),
+            Position = UDim2.new(0, -15, 0, -15),
+            Size = UDim2.new(1, 30, 1, 30),
             ZIndex = -1,
             Parent = MainFrame,
         })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius + 4),
-                Parent = WindowOuterGlow,
-            })
-        )
         task.spawn(function()
             local glowInfo = TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 0)
-            TweenService:Create(WindowOuterGlow, glowInfo, {BackgroundTransparency = 0.35}):Play()
+            TweenService:Create(WindowOuterGlow, glowInfo, {ImageTransparency = 0.2}):Play()
         end)
         table.insert(
             Library.Scales,
