@@ -8855,13 +8855,38 @@ function Library:CreateWindow(WindowInfo)
             Size = UDim2.new(1, 0, 0, 1),
         })
 
-        DividerLine = New("Frame", {
-            BackgroundColor3 = "OutlineColor",
-            Position = UDim2.fromOffset(InitialLeftWidth, 0),
-            Size = UDim2.new(0, 1, 1, -21),
+        -- Separated Sidebar Frame on the left
+        local SidebarFrame = New("Frame", {
+            BackgroundColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
+            end,
+            BackgroundTransparency = 0.1,
+            Position = UDim2.new(0, -InitialLeftWidth - 12, 0, 0),
+            Size = UDim2.new(0, InitialLeftWidth, 1, 0),
             Parent = MainFrame,
-            ZIndex = 2
+            ClipsDescendants = true,
         })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = SidebarFrame,
+            })
+        )
+        -- Soft outer glow for SidebarFrame as well
+        local SidebarOuterGlow = New("ImageLabel", {
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://6014261993",
+            ImageColor3 = "DarkColor",
+            ImageTransparency = 0.4,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49, 49, 450, 450),
+            Position = UDim2.new(0, -12, 0, -12),
+            Size = UDim2.new(1, 24, 1, 24),
+            ZIndex = -1,
+            Parent = SidebarFrame,
+        })
+        Library:AddOutline(SidebarFrame)
 
         local BackgroundIcon = Library:GetCustomIcon(WindowInfo.BackgroundImage)
         BackgroundImage = New("ImageLabel", {
@@ -9192,12 +9217,12 @@ function Library:CreateWindow(WindowInfo)
         --// Tabs \\--
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = "BackgroundColor",
+            BackgroundTransparency = 1,
             CanvasSize = UDim2.fromScale(0, 0),
-            Position = UDim2.fromOffset(0, 49),
+            Position = UDim2.fromOffset(0, 10),
             ScrollBarThickness = 0,
-            Size = UDim2.new(0, InitialLeftWidth, 1, -70),
-            Parent = MainFrame,
+            Size = UDim2.new(1, 0, 1, -20),
+            Parent = SidebarFrame,
         })
         New("UIListLayout", {
             Parent = Tabs,
@@ -9205,14 +9230,14 @@ function Library:CreateWindow(WindowInfo)
 
         --// Container \\--
         Container = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0),
+            BackgroundTransparency = 1,
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             ClipsDescendants = true,
             Name = "Container",
-            Position = UDim2.new(1, 0, 0, 49),
-            Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
+            Position = UDim2.fromOffset(0, 49),
+            Size = UDim2.new(1, 0, 1, -70),
             Parent = MainFrame,
         })
         New("UIPadding", {
