@@ -954,6 +954,17 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
     panelWidth = panelWidth or 220
     local isOpen = false
 
+    local panelGlow = Instance.new("Frame")
+    panelGlow.Name = "ChangelogGlow"
+    panelGlow.Size = UDim2.new(0, 18, 0, panelHeight + 18)
+    panelGlow.Position = UDim2.new(1, gap - 9, 0, -9)
+    panelGlow.BackgroundColor3 = Isnow.Theme.Accent
+    panelGlow.BackgroundTransparency = 0.86
+    panelGlow.BorderSizePixel = 0
+    panelGlow.ZIndex = 1
+    panelGlow.Parent = mainFrame
+    Instance.new("UICorner", panelGlow).CornerRadius = UDim.new(0, 12)
+
     local panel = Instance.new("Frame")
     panel.Name = "ChangelogPanel"
     panel.Size = UDim2.new(0, 0, 0, panelHeight)
@@ -962,6 +973,7 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
     panel.BorderSizePixel = 0
     panel.ClipsDescendants = true
     panel.Parent = mainFrame
+    panel.ZIndex = 2
     Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 4)
 
     local panelStroke = Instance.new("UIStroke", panel)
@@ -1126,7 +1138,7 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
             changeLabel.Parent = entry
         end
 
-        if i < #Isnow.Changelog then
+        if i < #getChangelogEntries() then
             local divWrapper = Instance.new("Frame")
             divWrapper.Size = UDim2.new(1, 0, 0, 2)
             divWrapper.BackgroundTransparency = 1
@@ -1146,11 +1158,13 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
         if isOpen then
             TweenService:Create(panelStroke, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
             TweenService:Create(panel, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, panelWidth, 0, panelHeight)}):Play()
+            TweenService:Create(panelGlow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, panelWidth + 18, 0, panelHeight + 18)}):Play()
             TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, currentContainerWidth + gap + panelWidth, 0, panelHeight)}):Play()
             if changelogIcon then TweenService:Create(changelogIcon, TweenInfo.new(0.3), {Rotation = 180}):Play() end
         else
             TweenService:Create(panelStroke, TweenInfo.new(0.2), {Transparency = 1}):Play()
             TweenService:Create(panel, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, panelHeight)}):Play()
+            TweenService:Create(panelGlow, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 18, 0, panelHeight + 18)}):Play()
             TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, currentContainerWidth, 0, panelHeight)}):Play()
             if changelogIcon then TweenService:Create(changelogIcon, TweenInfo.new(0.3), {Rotation = 0}):Play() end
         end
@@ -1171,6 +1185,18 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     local welcomeSize = isCompact and 11 or 12
     local spacing = isCompact and 3 or 5
 
+    local panelGlow = Instance.new("Frame")
+    panelGlow.Name = "UserInfoGlow"
+    panelGlow.Size = UDim2.new(0, (isOpen and panelWidth or 0) + 18, 0, panelHeight + 18)
+    panelGlow.Position = UDim2.new(0, -(gap) + 9, 0, -9)
+    panelGlow.AnchorPoint = Vector2.new(1, 0)
+    panelGlow.BackgroundColor3 = Isnow.Theme.Accent
+    panelGlow.BackgroundTransparency = 0.86
+    panelGlow.BorderSizePixel = 0
+    panelGlow.ZIndex = 1
+    panelGlow.Parent = mainFrame
+    Instance.new("UICorner", panelGlow).CornerRadius = UDim.new(0, 12)
+
     local panel = Instance.new("Frame")
     panel.Name = "UserInfoPanel"
     panel.Size = UDim2.new(0, isOpen and panelWidth or 0, 0, panelHeight)
@@ -1180,6 +1206,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     panel.BorderSizePixel = 0
     panel.ClipsDescendants = true
     panel.Parent = mainFrame
+    panel.ZIndex = 2
     Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 4)
 
     local panelStroke = Instance.new("UIStroke", panel)
@@ -1514,10 +1541,12 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
         if isOpen then
             TweenService:Create(panelStroke, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
             TweenService:Create(panel, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, panelWidth, 0, panelHeight)}):Play()
+            TweenService:Create(panelGlow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, panelWidth + 18, 0, panelHeight + 18)}):Play()
             TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, baseWidth + gap + panelWidth, 0, panelHeight)}):Play()
         else
             TweenService:Create(panelStroke, TweenInfo.new(0.2), {Transparency = 1}):Play()
             TweenService:Create(panel, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, panelHeight)}):Play()
+            TweenService:Create(panelGlow, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 18, 0, panelHeight + 18)}):Play()
             TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, baseWidth, 0, panelHeight)}):Play()
         end
     end
@@ -1547,8 +1576,8 @@ local function BuildCenteredUI(windowWidth, windowHeight, panelHeight, userPanel
 
     local outerGlow = Instance.new("Frame")
     outerGlow.Name = "ObsidianGlow"
-    outerGlow.Size = UDim2.new(1, 28, 1, 28)
-    outerGlow.Position = UDim2.new(0.5, 0, 0, 0)
+    outerGlow.Size = UDim2.new(0, windowWidth + 18, 0, windowHeight + 18)
+    outerGlow.Position = UDim2.new(0.5, 0, 0, -9)
     outerGlow.AnchorPoint = Vector2.new(0.5, 0)
     outerGlow.BackgroundColor3 = Isnow.Theme.Accent
     outerGlow.BackgroundTransparency = 0.86
@@ -1564,6 +1593,7 @@ local function BuildCenteredUI(windowWidth, windowHeight, panelHeight, userPanel
     mainFrame.AnchorPoint = Vector2.new(0.5, 0)
     mainFrame.BackgroundColor3 = Isnow.Theme.Background
     mainFrame.BorderSizePixel = 0
+    mainFrame.ZIndex = 2
     mainFrame.Parent = container
     Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 4)
 
@@ -1630,8 +1660,8 @@ local function BuildKeylessUI()
     local padding = 14
     local windowWidth = 300
     local windowHeight = 265
-    local userPanelWidth = 165
-    local changelogPanelWidth = 200
+    local userPanelWidth = 200
+    local changelogPanelWidth = 250
     local gap = 12
 
     local gui = Instance.new("ScreenGui")
@@ -1961,9 +1991,9 @@ local function BuildKeyUI()
     local elementHeight = mobile and math.clamp(56 * scale, 48, 62) or 56
     local buttonHeight = mobile and math.clamp(42 * scale, 38, 48) or 42
     local statusHeight = mobile and math.clamp(60 * scale, 52, 68) or 60
-    local userPanelWidth = 180
-    local changelogPanelWidth = 220
-    local gap = 12
+    local userPanelWidth = mobile and math.clamp(190 * scale, 160, 220) or 236
+    local changelogPanelWidth = mobile and math.clamp(230 * scale, 190, 260) or 290
+    local gap = mobile and 8 or 12
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "IsnowKeySystem"
