@@ -2761,7 +2761,7 @@ local function BuildKeyUI()
 
     local function formatRuntimeDuration(expiryValue)
         local expiry = tonumber(expiryValue)
-        if not expiry then return "Unavailable" end
+        if not expiry then return "Starts on first use" end
         local remaining = math.max(0, math.floor(expiry - os.time()))
         local days = math.floor(remaining / 86400)
         remaining = remaining % 86400
