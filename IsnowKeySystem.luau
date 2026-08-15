@@ -2759,6 +2759,36 @@ local function BuildKeyUI()
         end)
     end)
 
+    local function formatRuntimeDuration(expiryValue)
+        local expiry = tonumber(expiryValue)
+        if not expiry then return "Unavailable" end
+        local remaining = math.max(0, math.floor(expiry - os.time()))
+        local days = math.floor(remaining / 86400)
+        remaining = remaining % 86400
+        local hours = math.floor(remaining / 3600)
+        remaining = remaining % 3600
+        local minutes = math.floor(remaining / 60)
+        local seconds = remaining % 60
+        if days > 0 then
+            return string.format("%dd %02dh %02dm", days, hours, minutes)
+        elseif hours > 0 then
+            return string.format("%dh %02dm %02ds", hours, minutes, seconds)
+        elseif minutes > 0 then
+            return string.format("%dm %02ds", minutes, seconds)
+        end
+        return string.format("%ds", seconds)
+    end
+
+    local function readJunkieRuntime()
+        local runtimeEnv = getgenv()
+        -- Junkie may assign runtime globals a moment after the validator returns.
+        for _ = 1, 20 do
+            if tonumber(runtimeEnv.JD_EXPIRES_AT) then break end
+            task.wait(0.1)
+        end
+        return runtimeEnv
+    end
+
     local function handleRedeem()
         local key = textBox.Text:gsub("%s+", "")
         if key == "" then Isnow:Notify("Error", "Please enter your key", 3, "warning") return end
@@ -2785,12 +2815,13 @@ local function BuildKeyUI()
         redeemBtn.Active = true
         if valid then
             saveKey(key) getgenv().SCRIPT_KEY = key getgenv().IsnowLoaded = false
-            local runtimeEnv = getgenv()
+            local runtimeEnv = readJunkieRuntime()
             local runtimeIsPremium = runtimeEnv.JD_IS_PREMIUM == true
             local runtimeTier = runtimeIsPremium and "Premium" or "Standard"
-            local runtimeExpiry = runtimeEnv.JD_EXPIRES_AT or "Unknown"
+            local runtimeExpiry = tonumber(runtimeEnv.JD_EXPIRES_AT)
+            local runtimeDuration = formatRuntimeDuration(runtimeExpiry)
             setStatus("success", runtimeTier .. " Version")
-            Isnow:Notify("Access " .. runtimeTier .. " Key", "Duration - " .. tostring(runtimeExpiry), 4, "success")
+            Isnow:Notify("Access " .. runtimeTier .. " Key", "Duration remaining - " .. runtimeDuration, 4, "success")
             task.wait(1)
             closeDoorsThenExit(function()
                 disableBlur()
