@@ -31,6 +31,8 @@ local Tooltips = {}
 
 local BaseURL = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
 local CustomImageManager = {}
+local ExternalImageAssets = {}
+local ExternalImageAssetCounter = 0
 local CustomImageManagerAssets = {
     TransparencyTexture = {
         RobloxId = 139785960036434,
@@ -147,20 +149,81 @@ do
         if not getcustomasset or not writefile or not isfile then
             return false, "missing functions"
         end
-
         local AssetData = CustomImageManagerAssets[AssetName]
-
         RecursiveCreatePath(AssetData.Path, true)
-
         if ForceRedownload ~= true and isfile(AssetData.Path) then
             return true, nil
         end
-
         local success, errorMessage = pcall(function()
             writefile(AssetData.Path, game:HttpGet(AssetData.URL))
         end)
-
         return success, errorMessage
+    end
+
+    function CustomImageManager.GetExternalAsset(URL: string)
+        if typeof(URL) ~= "string" or URL == "" then
+            return nil
+        end
+
+        local CachedAsset = ExternalImageAssets[URL]
+        if CachedAsset then
+            return CachedAsset
+        end
+
+        -- A live Roblox client generally cannot render arbitrary web URLs in an
+        -- ImageLabel. Executors that expose getcustomasset can load the bytes
+        -- as a local Roblox asset instead.
+        if not getcustomasset or not writefile or not isfile then
+            return nil
+        end
+
+        ExternalImageAssetCounter += 1
+        local DownloadURL = URL
+        local LowerURL = URL:lower()
+
+        -- Roblox CDN commonly exposes WebP in copied browser links. Request
+        -- the same thumbnail as PNG because Roblox custom assets reliably
+        -- decode PNG/JPEG files, while WebP support varies by runtime.
+        if LowerURL:find("/image/webp/", 1, true) then
+            DownloadURL = URL:gsub("/Image/Webp/", "/Image/Png/")
+            LowerURL = DownloadURL:lower()
+        end
+
+        local Extension = "png"
+        if LowerURL:find("jpeg", 1, true) then
+            Extension = "jpeg"
+        elseif LowerURL:find("jpg", 1, true) then
+            Extension = "jpg"
+        elseif LowerURL:find("gif", 1, true) then
+            Extension = "gif"
+        end
+
+        local Path = string.format(
+            "Obsidian/external_assets/image_%d.%s",
+            ExternalImageAssetCounter,
+            Extension
+        )
+        RecursiveCreatePath(Path, true)
+
+        local Success, Body = pcall(function()
+            return game:HttpGet(DownloadURL)
+        end)
+        if not Success or typeof(Body) ~= "string" or #Body == 0 then
+            return nil
+        end
+
+        local WriteSuccess = pcall(writefile, Path, Body)
+        if not WriteSuccess or not isfile(Path) then
+            return nil
+        end
+
+        local AssetSuccess, AssetId = pcall(getcustomasset, Path)
+        if not AssetSuccess or not AssetId then
+            return nil
+        end
+
+        ExternalImageAssets[URL] = AssetId
+        return AssetId
     end
 
     for AssetName, _ in CustomImageManagerAssets do
@@ -1509,11 +1572,17 @@ function Library:GetCustomIcon(IconName: string): any
 
     local NormalizedIcon = NormalizeCustomIcon(IconName)
     if NormalizedIcon then
+        local ResolvedIcon = NormalizedIcon
+        if NormalizedIcon:match("^https://") then
+            ResolvedIcon = CustomImageManager.GetExternalAsset(NormalizedIcon) or NormalizedIcon
+        end
+
         return {
-            Url = NormalizedIcon,
+            Url = ResolvedIcon,
             ImageRectOffset = Vector2.zero,
             ImageRectSize = Vector2.zero,
-            Custom = not IsCustomAssetIcon(NormalizedIcon, true),
+            Custom = not IsCustomAssetIcon(ResolvedIcon, true),
+            External = ResolvedIcon ~= NormalizedIcon,
         }
     end
 
