@@ -15886,20 +15886,30 @@ function Library:CreateArqelKeySystem(Info)
 end
 
 function Library:Unload()
-    if Library.Unloaded then
-        return
-    end
+    --// Always clear blur effects first. This also repairs cleanup if Unload is
+    --// called again after an earlier partial teardown.
+    local Lighting = game:GetService("Lighting")
 
-    Library.Unloaded = true
-
-    --// Remove the blur owned by this Library instance before destroying the UI.
-    --// This runs for both direct Library:Unload() calls and the trash button.
     if Library.BackgroundBlurInstance then
         pcall(function()
             Library.BackgroundBlurInstance:Destroy()
         end)
         Library.BackgroundBlurInstance = nil
     end
+
+    for _, Effect in ipairs(Lighting:GetChildren()) do
+        if Effect:IsA("BlurEffect") and Effect.Name == "ObsidianBackgroundBlur" then
+            pcall(function()
+                Effect:Destroy()
+            end)
+        end
+    end
+
+    if Library.Unloaded then
+        return
+    end
+
+    Library.Unloaded = true
 
     --// Disconnect connections
     for Index = #Library.Signals, 1, -1 do
