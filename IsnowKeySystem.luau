@@ -153,23 +153,61 @@ end
 
 local GameMetadataCache = {}
 
-local function resolveGameMetadata(gameId)
-    gameId = tostring(gameId or "")
+local function scanGameById(gameId)
+    gameId = tostring(gameId or ""):match("%d+") or ""
     if gameId == "" then return nil, nil end
     if GameMetadataCache[gameId] then
         return GameMetadataCache[gameId].Name, GameMetadataCache[gameId].Icon
     end
 
-    local gameName, gameIcon
-    pcall(function()
-        local info = MarketplaceService:GetProductInfo(tonumber(gameId), Enum.InfoType.Asset)
-        if info and info.Name then gameName = info.Name end
-    end)
-    -- rbxthumb is resolved by Roblox directly and works reliably for place IDs.
-    gameIcon = "rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512"
+    local gameName, gameIcon, universeId
+    local function requestJson(url)
+        local response
+        local ok = pcall(function()
+            response = game:HttpGet(url)
+        end)
+        if not ok or not response then
+            ok = pcall(function()
+                response = HttpService:GetAsync(url)
+            end)
+        end
+        if not ok or not response then return nil end
+        local decoded
+        pcall(function() decoded = HttpService:JSONDecode(response) end)
+        return decoded
+    end
+
+    -- Convert the pasted place ID into a universe ID, then scan its details and icon.
+    local universeResponse = requestJson("https://apis.roblox.com/universes/v1/places/" .. gameId .. "/universe")
+    if universeResponse then universeId = universeResponse.universeId end
+    if universeId then
+        local details = requestJson("https://games.roblox.com/v1/games?universeIds=" .. tostring(universeId))
+        if details and details.data and details.data[1] then
+            gameName = details.data[1].name
+        end
+        local icons = requestJson("https://thumbnails.roblox.com/v1/games/icons?universeIds=" .. tostring(universeId) .. "&size=512x512&format=Png&isCircular=false")
+        if icons and icons.data and icons.data[1] and icons.data[1].state == "Completed" then
+            -- ImageLabel cannot use the external CDN URL directly; use Roblox's native thumbnail URI.
+            gameIcon = "rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512"
+        end
+    end
+
+    if not gameName then
+        pcall(function()
+            local info = MarketplaceService:GetProductInfo(tonumber(gameId), Enum.InfoType.Asset)
+            if info and info.Name then gameName = info.Name end
+        end)
+    end
+    if not gameIcon then
+        gameIcon = "rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512"
+    end
 
     GameMetadataCache[gameId] = {Name = gameName, Icon = gameIcon}
     return gameName, gameIcon
+end
+
+local function resolveGameMetadata(gameId)
+    return scanGameById(gameId)
 end
 
 local function getDescriptionList(update)
@@ -2086,7 +2124,7 @@ local function BuildKeyUI()
     local statusHeight = mobile and math.clamp(60 * scale, 52, 68) or 60
     local userPanelWidth = mobile and math.clamp(190 * scale, 160, 220) or 236
     local changelogPanelWidth = mobile and math.clamp(230 * scale, 190, 260) or 290
-    local gap = mobile and 12 or 38
+    local gap = mobile and 14 or 52
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "IsnowKeySystem"
@@ -2229,6 +2267,8 @@ local function BuildKeyUI()
 
         local icon = Instance.new("ImageLabel")
         icon.Size = UDim2.fromOffset(18, 18)
+        icon.Position = UDim2.new(0, 12, 0.5, 0)
+        icon.AnchorPoint = Vector2.new(0, 0.5)
         icon.BackgroundTransparency = 1
         icon.Image = getIcon(iconKey) or getIcon("shield")
         icon.ImageColor3 = Isnow.Theme.Text
@@ -2236,8 +2276,9 @@ local function BuildKeyUI()
         icon.Parent = button
 
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -30, 1, 0)
-        label.Position = UDim2.new(0, 30, 0, 0)
+        label.Size = UDim2.new(1, -38, 1, 0)
+        label.Position = UDim2.new(0, 34, 0, 0)
+        label.TextYAlignment = Enum.TextYAlignment.Center
         label.BackgroundTransparency = 1
         label.Text = text
         label.TextColor3 = Isnow.Theme.Text
