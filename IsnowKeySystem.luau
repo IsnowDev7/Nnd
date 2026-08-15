@@ -145,7 +145,7 @@ local function normalizeAssetId(asset)
     if asset == nil or asset == "" then return "" end
     asset = tostring(asset)
     if asset:match("^%d+$") then return "rbxassetid://" .. asset end
-    if asset:match("^rbxasset://") or asset:match("^rbxassetid://") or asset:match("^https?://") then
+    if asset:match("^rbxasset://") or asset:match("^rbxassetid://") or asset:match("^rbxthumb://") or asset:match("^https?://") then
         return asset
     end
     return asset
@@ -165,13 +165,8 @@ local function resolveGameMetadata(gameId)
         local info = MarketplaceService:GetProductInfo(tonumber(gameId), Enum.InfoType.Asset)
         if info and info.Name then gameName = info.Name end
     end)
-    pcall(function()
-        local response = HttpService:GetAsync("https://thumbnails.roblox.com/v1/games/icons?placeIds=" .. gameId .. "&size=512x512&format=Png&isCircular=false")
-        local decoded = HttpService:JSONDecode(response)
-        if decoded and decoded.data and decoded.data[1] then
-            gameIcon = decoded.data[1].imageUrl
-        end
-    end)
+    -- rbxthumb is resolved by Roblox directly and works reliably for place IDs.
+    gameIcon = "rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512"
 
     GameMetadataCache[gameId] = {Name = gameName, Icon = gameIcon}
     return gameName, gameIcon
@@ -460,6 +455,26 @@ local function disableBlur()
         local existing = Lighting:FindFirstChild("IsnowKeySystemBlur")
         if existing then existing:Destroy() end
         Internal.BlurEffect = nil
+    end
+end
+
+local function fadeGuiTree(root, duration)
+    if not root then return end
+    local info = TweenInfo.new(duration or 0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+    local function fadeObject(object)
+        if object:IsA("GuiObject") then
+            local goals = {}
+            if object.BackgroundTransparency < 1 then goals.BackgroundTransparency = 1 end
+            if object:IsA("ImageLabel") or object:IsA("ImageButton") then goals.ImageTransparency = 1 end
+            if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then goals.TextTransparency = 1 end
+            if next(goals) then TweenService:Create(object, info, goals):Play() end
+        elseif object:IsA("UIStroke") then
+            TweenService:Create(object, info, {Transparency = 1}):Play()
+        end
+    end
+    fadeObject(root)
+    for _, object in ipairs(root:GetDescendants()) do
+        fadeObject(object)
     end
 end
 
@@ -1107,7 +1122,12 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
         if imageAsset == "" and (update.GameIcon == true or (update.GameIcon == nil and Isnow.Game.GameIcon == true)) then
             imageAsset = resolvedGameIcon or ""
         end
-        local displayGameName = update.GameName or ((update.GameName == nil and Isnow.Game.GameName == true) and resolvedGameName or nil)
+        local displayGameName = nil
+        if type(update.GameName) == "string" and update.GameName ~= "" then
+            displayGameName = update.GameName
+        elseif update.GameName ~= false and (update.GameName == true or (update.GameName == nil and Isnow.Game.GameName == true)) then
+            displayGameName = resolvedGameName
+        end
         local joinLink = update.JoinLink or update.Join or Isnow.Changelog.JoinLink
         local joinEnabled = update.JoinButton == true or (update.JoinButton == nil and Isnow.Changelog.JoinButton == true)
         if imageAsset ~= "" then
@@ -2001,11 +2021,11 @@ local function BuildKeylessUI()
     closeBtn.MouseButton1Click:Connect(function()
         Isnow:Notify("Goodbye", "See you next time!", 2, "close")
         closeDoorsThenExit(function()
+            fadeGuiTree(container, 0.35)
+            TweenService:Create(container, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
+            task.wait(0.46)
             fullCleanup()
-            TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
-            TweenService:Create(main, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
-            task.wait(0.4) gui:Destroy()
+            if gui and gui.Parent then gui:Destroy() end
         end)
         if Isnow.Callbacks.OnClose then Isnow.Callbacks.OnClose() end
     end)
@@ -2016,10 +2036,10 @@ local function BuildKeylessUI()
         getgenv().IsnowLoaded = false
         closeDoorsThenExit(function()
             disableBlur()
-            TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
-            TweenService:Create(main, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
-            task.wait(0.4) gui:Destroy()
+            fadeGuiTree(container, 0.35)
+            TweenService:Create(container, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
+            task.wait(0.46)
+            if gui and gui.Parent then gui:Destroy() end
             if not Internal.IsJunkieMode and Isnow.Callbacks.OnSuccess then Isnow.Callbacks.OnSuccess() end
         end)
     end)
@@ -2066,7 +2086,7 @@ local function BuildKeyUI()
     local statusHeight = mobile and math.clamp(60 * scale, 52, 68) or 60
     local userPanelWidth = mobile and math.clamp(190 * scale, 160, 220) or 236
     local changelogPanelWidth = mobile and math.clamp(230 * scale, 190, 260) or 290
-    local gap = mobile and 10 or 26
+    local gap = mobile and 12 or 38
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "IsnowKeySystem"
@@ -2238,8 +2258,8 @@ local function BuildKeyUI()
         return button
     end
 
-    local freeAccessBtn = createAccessButton("Free Version", "key", false)
-    local premiumAccessBtn = createAccessButton("Premium Version", "shield", true)
+    local freeAccessBtn = createAccessButton("Free", "key", false)
+    local premiumAccessBtn = createAccessButton("Premium", "shield", true)
 
     local inputStartY = contentStartY + statusHeight + 10
 
@@ -2611,10 +2631,11 @@ local function BuildKeyUI()
     closeBtn.MouseButton1Click:Connect(function()
         Isnow:Notify("Goodbye", "See you next time!", 2, "close")
         closeDoorsThenExit(function()
+            fadeGuiTree(container, 0.35)
+            TweenService:Create(container, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
+            task.wait(0.46)
             fullCleanup()
-            TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
-            TweenService:Create(mainFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-            task.wait(0.4) screenGui:Destroy()
+            if screenGui and screenGui.Parent then screenGui:Destroy() end
             if Isnow.Callbacks.OnClose then Isnow.Callbacks.OnClose() end
         end)
     end)
@@ -2654,9 +2675,10 @@ local function BuildKeyUI()
             task.wait(1)
             closeDoorsThenExit(function()
                 disableBlur()
-                TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
-                TweenService:Create(mainFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-                task.wait(0.4) screenGui:Destroy()
+                fadeGuiTree(container, 0.35)
+                TweenService:Create(container, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
+                task.wait(0.46)
+                if screenGui and screenGui.Parent then screenGui:Destroy() end
                 if not Internal.IsJunkieMode and Isnow.Callbacks.OnSuccess then Isnow.Callbacks.OnSuccess() end
             end)
         else
