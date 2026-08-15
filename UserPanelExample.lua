@@ -108,7 +108,9 @@ MainLeft:AddInput("ExampleInput", {
 MainRight:AddLabel("This is a label")
 MainRight:AddLabel("Another label")
 
-MainRight:AddKeyPicker("ExampleKeybind", {
+local KeybindLabel = MainRight:AddLabel("Keybind")
+
+KeybindLabel:AddKeyPicker("ExampleKeybind", {
     Text = "Keybind",
     Default = "RightShift",
     Mode = "Toggle",
