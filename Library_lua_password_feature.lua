@@ -1393,12 +1393,81 @@ function Library:GiveSignal(Connection: RBXScriptConnection | RBXScriptSignal)
     return Connection
 end
 
+local function TrimIconUrl(Icon: string): string
+    return Icon:match("^%s*(.-)%s*$")
+end
+
+local function NormalizeCustomIcon(Icon: string): string?
+    if typeof(Icon) ~= "string" then
+        return nil
+    end
+
+    Icon = TrimIconUrl(Icon)
+    if Icon == "" then
+        return nil
+    end
+
+    -- A bare numeric value is a Roblox asset ID.
+    local BareAssetId = Icon:match("^%d+$")
+    if BareAssetId then
+        return "rbxassetid://" .. BareAssetId
+    end
+
+    -- Convert common Roblox asset pages and asset endpoints to a native ID.
+    local AssetId = Icon:match("[?&]id=(%d+)")
+        or Icon:match("[?&]assetId=(%d+)")
+        or Icon:match("/library/(%d+)")
+        or Icon:match("/catalog/(%d+)")
+        or Icon:match("/store/asset/(%d+)")
+
+    if AssetId and (Icon:match("roblox%.com") or Icon:match("create%.roblox%.com")) then
+        return "rbxassetid://" .. AssetId
+    end
+
+    -- Roblox-native content formats can be assigned directly.
+    if Icon:match("^content://")
+        or Icon:match("^rbxasset://")
+        or Icon:match("^rbxassetid://%d+$")
+        or Icon:match("^rbxthumb://type=") then
+        return Icon
+    end
+
+    -- Chrome often copies an HTTPS URL. Preserve HTTPS for Roblox CDN and
+    -- thumbnail URLs, and upgrade HTTP to HTTPS where possible.
+    if Icon:match("^https://") or Icon:match("^http://") then
+        local SecureIcon = Icon:gsub("^http://", "https://")
+        local Host = SecureIcon:match("^https://([^/%?#]+)")
+        if Host then
+            Host = Host:lower()
+            if Host == "roblox.com"
+                or Host:match("%.roblox%.com$")
+                or Host == "rbxcdn.com"
+                or Host:match("%.rbxcdn%.com$") then
+                return SecureIcon
+            end
+
+            -- Generic direct URLs copied from Chrome are also passed through,
+            -- including extensionless CDN URLs. Roblox may still require the
+            -- host to be approved or the image to be uploaded as an asset.
+            return SecureIcon
+        end
+    end
+
+    return nil
+end
+
 function IsValidCustomIcon(Icon: string)
-    return typeof(Icon) == "string" and (Icon:match("^rbxasset://textures/") or Icon:match("roblox%.com/asset/%?id=") or Icon:match("rbxthumb://type="))
+    return NormalizeCustomIcon(Icon) ~= nil
 end
 
 local function IsCustomAssetIcon(Icon: string, IncludeAssetId: boolean)
-    return typeof(Icon) == "string" and (Icon:match("^content://") or Icon:match("^rbxasset://%x+/") or (IncludeAssetId == true and Icon:match("^rbxassetid://")))
+    if typeof(Icon) ~= "string" then
+        return false
+    end
+
+    return Icon:match("^content://")
+        or Icon:match("^rbxasset://%x+/")
+        or (IncludeAssetId == true and Icon:match("^rbxassetid://"))
 end
 
 type Icon = {
@@ -1438,22 +1507,13 @@ function Library:GetCustomIcon(IconName: string): any
         return nil
     end
 
-    if tonumber(IconName) then
-        IconName = string.format("rbxassetid://%s", tostring(IconName))
-    end
-
-    if IsCustomAssetIcon(IconName, true) then
+    local NormalizedIcon = NormalizeCustomIcon(IconName)
+    if NormalizedIcon then
         return {
-            Url = IconName,
+            Url = NormalizedIcon,
             ImageRectOffset = Vector2.zero,
             ImageRectSize = Vector2.zero,
-        }
-    elseif IsValidCustomIcon(IconName) then
-        return {
-            Url = IconName,
-            ImageRectOffset = Vector2.zero,
-            ImageRectSize = Vector2.zero,
-            Custom = true,
+            Custom = not IsCustomAssetIcon(NormalizedIcon, true),
         }
     end
 
