@@ -151,6 +151,31 @@ local function normalizeAssetId(asset)
     return asset
 end
 
+local function materializeImageSource(source)
+    source = normalizeAssetId(source)
+    if source == "" or not source:match("^https?://") then return source end
+
+    -- Roblox ImageLabels cannot render arbitrary CDN URLs directly. When the
+    -- executor exposes request/writefile/getcustomasset, cache the image locally.
+    local getAsset = getcustomasset or getsynasset
+    local httpRequest = request or (syn and syn.request) or (http and http.request)
+    if not (getAsset and writefile and httpRequest) then return source end
+
+    local safeName = source:gsub("[^%w]", "_"):sub(1, 80)
+    local fileName = "IsnowImage_" .. safeName .. ".png"
+    local ok, result = pcall(function()
+        if isfile and isfile(fileName) then
+            return getAsset(fileName)
+        end
+        local response = httpRequest({Url = source, Method = "GET"})
+        local body = response and (response.Body or response.body)
+        if not body then return source end
+        writefile(fileName, body)
+        return getAsset(fileName)
+    end)
+    return ok and result or source
+end
+
 local GameMetadataCache = {}
 
 local function scanGameById(gameId)
@@ -1156,7 +1181,7 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
 
         local gameId = update.GameID or Isnow.Game.GameID
         local resolvedGameName, resolvedGameIcon = resolveGameMetadata(gameId)
-        local imageAsset = normalizeAssetId(update.Image or Isnow.Changelog.Image)
+        local imageAsset = materializeImageSource(update.Image or Isnow.Changelog.Image)
         if imageAsset == "" and (update.GameIcon == true or (update.GameIcon == nil and Isnow.Game.GameIcon == true)) then
             imageAsset = resolvedGameIcon or ""
         end
@@ -2124,7 +2149,7 @@ local function BuildKeyUI()
     local statusHeight = mobile and math.clamp(60 * scale, 52, 68) or 60
     local userPanelWidth = mobile and math.clamp(190 * scale, 160, 220) or 236
     local changelogPanelWidth = mobile and math.clamp(230 * scale, 190, 260) or 290
-    local gap = mobile and 14 or 52
+    local gap = mobile and 16 or 70
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "IsnowKeySystem"
@@ -2265,28 +2290,39 @@ local function BuildKeyUI()
         stroke.Thickness = 1
         stroke.Transparency = primary and 0.25 or 0.55
 
+        local content = Instance.new("Frame")
+        content.Name = "CenteredContent"
+        content.Size = UDim2.new(1, -16, 1, 0)
+        content.Position = UDim2.new(0.5, 0, 0.5, 0)
+        content.AnchorPoint = Vector2.new(0.5, 0.5)
+        content.BackgroundTransparency = 1
+        content.Parent = button
+
+        local contentLayout = Instance.new("UIListLayout", content)
+        contentLayout.FillDirection = Enum.FillDirection.Horizontal
+        contentLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        contentLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        contentLayout.Padding = UDim.new(0, 7)
+
         local icon = Instance.new("ImageLabel")
         icon.Size = UDim2.fromOffset(18, 18)
-        icon.Position = UDim2.new(0, 12, 0.5, 0)
-        icon.AnchorPoint = Vector2.new(0, 0.5)
         icon.BackgroundTransparency = 1
         icon.Image = getIcon(iconKey) or getIcon("shield")
         icon.ImageColor3 = Isnow.Theme.Text
         icon.LayoutOrder = 1
-        icon.Parent = button
+        icon.Parent = content
 
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -38, 1, 0)
-        label.Position = UDim2.new(0, 34, 0, 0)
-        label.TextYAlignment = Enum.TextYAlignment.Center
+        label.AutomaticSize = Enum.AutomaticSize.X
+        label.Size = UDim2.new(0, 0, 1, 0)
         label.BackgroundTransparency = 1
         label.Text = text
         label.TextColor3 = Isnow.Theme.Text
         label.TextSize = mobile and 12 or 13
         label.Font = Enum.Font.ArimoBold
         label.TextXAlignment = Enum.TextXAlignment.Center
-        label.TextTruncate = Enum.TextTruncate.AtEnd
-        label.Parent = button
+        label.TextYAlignment = Enum.TextYAlignment.Center
+        label.Parent = content
 
         local normalColor = button.BackgroundColor3
         local hoverColor = primary and Isnow.Theme.AccentHover or Isnow.Theme.Input
