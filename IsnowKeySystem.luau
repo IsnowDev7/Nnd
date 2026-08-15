@@ -42,7 +42,7 @@ local Isnow = {}
 --appearance
 Isnow.Appearance = {
     Title = "Isnow",
-    Subtitle = "Enter your key to continue",
+    Subtitle = "Choose your access type",
     Icon = "rbxassetid://95721401302279",
     IconSize = UDim2.new(0, 30, 0, 30)
 }
@@ -2101,6 +2101,69 @@ local function BuildKeyUI()
     statusLabel.TextXAlignment = Enum.TextXAlignment.Left
     statusLabel.TextTruncate = Enum.TextTruncate.AtEnd
     statusLabel.Parent = statusFrame
+    statusLabel.Visible = false
+
+    local accessSelector = Instance.new("Frame")
+    accessSelector.Name = "AccessSelector"
+    accessSelector.Size = UDim2.new(1, -64, 1, -16)
+    accessSelector.Position = UDim2.new(0, 52, 0.5, 0)
+    accessSelector.AnchorPoint = Vector2.new(0, 0.5)
+    accessSelector.BackgroundTransparency = 1
+    accessSelector.Parent = statusFrame
+
+    local accessLayout = Instance.new("UIListLayout", accessSelector)
+    accessLayout.FillDirection = Enum.FillDirection.Horizontal
+    accessLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    accessLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    accessLayout.Padding = UDim.new(0, 8)
+
+    local function createAccessButton(text, iconKey, primary)
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(0.5, -4, 1, 0)
+        button.BackgroundColor3 = primary and Isnow.Theme.Accent or Isnow.Theme.Background
+        button.BorderSizePixel = 0
+        button.AutoButtonColor = false
+        button.Text = ""
+        button.Parent = accessSelector
+        Instance.new("UICorner", button).CornerRadius = UDim.new(0, 5)
+
+        local stroke = Instance.new("UIStroke", button)
+        stroke.Color = primary and Isnow.Theme.AccentHover or Isnow.Theme.Accent
+        stroke.Thickness = 1
+        stroke.Transparency = primary and 0.25 or 0.55
+
+        local icon = Instance.new("ImageLabel")
+        icon.Size = UDim2.fromOffset(18, 18)
+        icon.BackgroundTransparency = 1
+        icon.Image = getIcon(iconKey)
+        icon.ImageColor3 = Isnow.Theme.Text
+        icon.LayoutOrder = 1
+        icon.Parent = button
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -26, 1, 0)
+        label.Position = UDim2.new(0, 26, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.TextColor3 = Isnow.Theme.Text
+        label.TextSize = mobile and 13 or 14
+        label.Font = Enum.Font.ArimoBold
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = button
+
+        local normalColor = button.BackgroundColor3
+        local hoverColor = primary and Isnow.Theme.AccentHover or Isnow.Theme.Input
+        button.MouseEnter:Connect(function()
+            TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor}):Play()
+        end)
+        button.MouseLeave:Connect(function()
+            TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = normalColor}):Play()
+        end)
+        return button
+    end
+
+    local freeAccessBtn = createAccessButton("Free", "unlock", false)
+    local premiumAccessBtn = createAccessButton("Premium", "crown", true)
 
     local inputStartY = contentStartY + statusHeight + 10
 
@@ -2204,12 +2267,16 @@ local function BuildKeyUI()
     end
 
     local acquireBtn = createButton(Isnow.Options.NoGetKey and "Unavailable" or "Get Key", Isnow.Options.NoGetKey and "nogetkey" or "key", false, acquireStartY)
+    inputFrame.Visible = false
+    dividerLine.Visible = false
     if Isnow.Options.NoGetKey then
         acquireBtn.Active = false
         TweenService:Create(acquireBtn, TweenInfo.new(0), {BackgroundColor3 = Isnow.Theme.Pending}):Play()
     end
 
     local redeemBtn = createButton("Redeem Key", "shield", true, acquireStartY + buttonHeight + 5)
+    acquireBtn.Visible = false
+    redeemBtn.Visible = false
     local bottomY = acquireStartY + buttonHeight * 2 + 10
 
     local userBtn = Instance.new("TextButton")
@@ -2516,6 +2583,23 @@ local function BuildKeyUI()
         end
     end
 
+    local function showPremiumControls()
+        accessSelector.Visible = false
+        statusLabel.Visible = true
+        statusLabel.Text = "Premium access selected"
+        statusIcon.Image = getIcon("crown")
+        statusIcon.ImageColor3 = Isnow.Theme.Accent
+        inputFrame.Visible = true
+        dividerLine.Visible = true
+        acquireBtn.Visible = true
+        redeemBtn.Visible = true
+    end
+
+    freeAccessBtn.MouseButton1Click:Connect(function()
+        handleKeylessSkip()
+    end)
+
+    premiumAccessBtn.MouseButton1Click:Connect(showPremiumControls)
     redeemBtn.MouseButton1Click:Connect(handleRedeem)
     acquireBtn.MouseButton1Click:Connect(function()
         if Isnow.Options.NoGetKey then
