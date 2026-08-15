@@ -613,6 +613,7 @@ local Templates = {
     },
     Image = {
         Image = "",
+        GameThumbnail = false,
         Transparency = 0,
         BackgroundTransparency = 0,
         Color = Color3.new(1, 1, 1),
@@ -8802,11 +8803,19 @@ do
         local Groupbox = self
         local Container = Groupbox.Container
 
+        local RequestedImage = Info.Image
+        if Info.GameThumbnail == true then
+            RequestedImage = string.format(
+                "rbxthumb://type=GameThumbnail&id=%s&w=768&h=432",
+                tostring(game.PlaceId)
+            )
+        end
+
         local Image = {
             Connections = {},
             Destroyed = false,
 
-            Image = Info.Image,
+            Image = RequestedImage,
             Color = Info.Color,
             RectOffset = Info.RectOffset,
             RectSize = Info.RectSize,

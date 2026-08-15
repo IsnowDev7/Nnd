@@ -63,13 +63,10 @@ ChangelogBox:AddLabel("First Release V1")
 -- Right side: game details.
 local GameDetailsBox = InfoTab:AddRightGroupbox("Steal An Egg", "gamepad-2")
 
--- AddImage accepts copied Chrome/Roblox image URLs, including extensionless
--- rbxcdn links. It also accepts numeric IDs, rbxassetid://, rbxthumb://,
--- Roblox asset pages, and direct HTTPS image URLs.
-local StealAnEggThumbnailUrl = "https://tr.rbxcdn.com/180DAY-79e666901b2c722b06310d267bc6c152/768/432/Image/Webp/noFilter"
-
+-- GameThumbnail automatically uses the current game's PlaceId. No image URL
+-- is required; the title/groupbox name can describe the game normally.
 GameDetailsBox:AddImage("StealAnEggThumbnail", {
-    Image = StealAnEggThumbnailUrl,
+    GameThumbnail = true,
     Height = 150,
     ScaleType = Enum.ScaleType.Crop,
     Transparency = 0,
