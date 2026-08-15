@@ -14866,17 +14866,29 @@ function Library:CreateWindow(WindowInfo)
             LockButton:SetIconColor(Color3.fromRGB(220, 50, 50))
         end
     end)
+
+    --// Trash: permanently removes the window and all registered resources
+    local TrashButton = CreateSquareMobileButton("trash-2")
+    TrashButton:SetIconColor(Color3.fromRGB(220, 80, 80))
+    TrashButton.Button.MouseButton1Click:Connect(function()
+        Library:Unload()
+    end)
+
     if WindowInfo.MobileButtonsSide == "Right" then
         ToggleButton.Button.Position = UDim2.new(1, -6, 0, 6)
         ToggleButton.Button.AnchorPoint = Vector2.new(1, 0)
         LockButton.Button.Position = UDim2.new(1, -6, 0, 46)
         LockButton.Button.AnchorPoint = Vector2.new(1, 0)
+        TrashButton.Button.Position = UDim2.new(1, -6, 0, 86)
+        TrashButton.Button.AnchorPoint = Vector2.new(1, 0)
     else
         LockButton.Button.Position = UDim2.fromOffset(6, 46)
+        TrashButton.Button.Position = UDim2.fromOffset(6, 86)
     end
     if WindowInfo.ShowMobileButtons == false then
         ToggleButton.Button.Visible = false
         LockButton.Button.Visible = false
+        TrashButton.Button.Visible = false
     end
 
     --// Execution \\--
