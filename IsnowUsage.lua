@@ -36,6 +36,14 @@ Isnow.Shop = {
     Link = "https://isnow.example/premium"
 }
 
+-- Automatic game metadata for changelog cards.
+-- Leave Image empty when you want the UI to resolve the game thumbnail.
+Isnow.Game = {
+    GameID = "1029392",
+    GameIcon = true,
+    GameName = true
+}
+
 local function getJunkieRuntimeAccess()
     local env = getgenv()
     local expiresAt = env.JD_EXPIRES_AT
@@ -67,19 +75,21 @@ Isnow:SetChangelog({
             Version = "2.3.0",
             Date = "Aug 13, 2026",
             Badge = "NEW",
-            Image = "rbxassetid://1234567890",
+            Image = "",
+            GameID = "1029392",
             Description = {
                 "Introduced the new Isnow Control Center",
                 "Added the Obsidian-style window frame and glow",
                 "Improved key-system layout and animations"
             },
-            JoinLink = "https://www.roblox.com/games/1234567890/Example-Game",
+            JoinLink = "https://www.roblox.com/games/1029392/Example-Game",
             JoinButton = true
         },
         {
             Version = "2.2.0",
             Date = "Aug 1, 2026",
-            Image = "rbxassetid://9876543210",
+            Image = "",
+            GameID = "1029392",
             Description = {
                 "Improved validation performance",
                 "Added new theme customization options"

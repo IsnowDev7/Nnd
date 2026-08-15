@@ -29,6 +29,7 @@ local RunService = cloneref(game:GetService("RunService"))
 local Lighting = cloneref(game:GetService("Lighting"))
 local Players = cloneref(game:GetService("Players"))
 local TeleportService = cloneref(game:GetService("TeleportService"))
+local MarketplaceService = cloneref(game:GetService("MarketplaceService"))
 
 local hui = gethui()
 
@@ -101,6 +102,12 @@ Isnow.Changelog = {
     Entries = {}
 }
 
+Isnow.Game = {
+    GameID = "",
+    GameIcon = false,
+    GameName = false
+}
+
 function Isnow:SetChangelog(config)
     if type(config) ~= "table" then
         self.Changelog = {Enabled = false, Entries = {}}
@@ -142,6 +149,32 @@ local function normalizeAssetId(asset)
         return asset
     end
     return asset
+end
+
+local GameMetadataCache = {}
+
+local function resolveGameMetadata(gameId)
+    gameId = tostring(gameId or "")
+    if gameId == "" then return nil, nil end
+    if GameMetadataCache[gameId] then
+        return GameMetadataCache[gameId].Name, GameMetadataCache[gameId].Icon
+    end
+
+    local gameName, gameIcon
+    pcall(function()
+        local info = MarketplaceService:GetProductInfo(tonumber(gameId), Enum.InfoType.Asset)
+        if info and info.Name then gameName = info.Name end
+    end)
+    pcall(function()
+        local response = HttpService:GetAsync("https://thumbnails.roblox.com/v1/games/icons?placeIds=" .. gameId .. "&size=512x512&format=Png&isCircular=false")
+        local decoded = HttpService:JSONDecode(response)
+        if decoded and decoded.data and decoded.data[1] then
+            gameIcon = decoded.data[1].imageUrl
+        end
+    end)
+
+    GameMetadataCache[gameId] = {Name = gameName, Icon = gameIcon}
+    return gameName, gameIcon
 end
 
 local function getDescriptionList(update)
@@ -1068,7 +1101,13 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
         local entryLayout = Instance.new("UIListLayout", entry)
         entryLayout.Padding = UDim.new(0, 5)
 
+        local gameId = update.GameID or Isnow.Game.GameID
+        local resolvedGameName, resolvedGameIcon = resolveGameMetadata(gameId)
         local imageAsset = normalizeAssetId(update.Image or Isnow.Changelog.Image)
+        if imageAsset == "" and (update.GameIcon == true or (update.GameIcon == nil and Isnow.Game.GameIcon == true)) then
+            imageAsset = resolvedGameIcon or ""
+        end
+        local displayGameName = update.GameName or ((update.GameName == nil and Isnow.Game.GameName == true) and resolvedGameName or nil)
         local joinLink = update.JoinLink or update.Join or Isnow.Changelog.JoinLink
         local joinEnabled = update.JoinButton == true or (update.JoinButton == nil and Isnow.Changelog.JoinButton == true)
         if imageAsset ~= "" then
@@ -1112,10 +1151,44 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
             end
         end
 
+        if imageAsset == "" and joinEnabled and joinLink then
+            local joinRow = Instance.new("Frame")
+            joinRow.Size = UDim2.new(1, 0, 0, 34)
+            joinRow.BackgroundColor3 = Isnow.Theme.Input
+            joinRow.BorderSizePixel = 0
+            joinRow.LayoutOrder = 1
+            joinRow.Parent = entry
+            Instance.new("UICorner", joinRow).CornerRadius = UDim.new(0, 5)
+
+            local joinButton = Instance.new("TextButton")
+            joinButton.Size = UDim2.fromOffset(72, 24)
+            joinButton.Position = UDim2.new(1, -6, 0.5, 0)
+            joinButton.AnchorPoint = Vector2.new(1, 0.5)
+            joinButton.BackgroundColor3 = Isnow.Theme.Accent
+            joinButton.BorderSizePixel = 0
+            joinButton.Text = "Join"
+            joinButton.TextColor3 = Isnow.Theme.Text
+            joinButton.TextSize = 12
+            joinButton.Font = Enum.Font.ArimoBold
+            joinButton.AutoButtonColor = false
+            joinButton.Parent = joinRow
+            Instance.new("UICorner", joinButton).CornerRadius = UDim.new(0, 5)
+            joinButton.MouseEnter:Connect(function() TweenService:Create(joinButton, TweenInfo.new(0.15), {BackgroundColor3 = Isnow.Theme.AccentHover}):Play() end)
+            joinButton.MouseLeave:Connect(function() TweenService:Create(joinButton, TweenInfo.new(0.15), {BackgroundColor3 = Isnow.Theme.Accent}):Play() end)
+            joinButton.MouseButton1Click:Connect(function()
+                local placeId = extractPlaceId(joinLink)
+                if placeId then pcall(function() TeleportService:Teleport(placeId, Players.LocalPlayer) end) end
+            end)
+        end
+
         local versionLabel = Instance.new("TextLabel")
         versionLabel.Size = UDim2.new(1, 0, 0, 22)
         versionLabel.BackgroundTransparency = 1
-        versionLabel.Text = update.Version .. "  •  " .. update.Date
+        local versionText = tostring(update.Version or "Update") .. "  •  " .. tostring(update.Date or "")
+        if displayGameName and displayGameName ~= "" then
+            versionText = tostring(displayGameName) .. "  •  " .. versionText
+        end
+        versionLabel.Text = versionText
         versionLabel.TextColor3 = Isnow.Theme.Accent
         versionLabel.TextSize = 14
         versionLabel.Font = Enum.Font.ArimoBold
@@ -2117,6 +2190,8 @@ local function BuildKeyUI()
     accessLayout.VerticalAlignment = Enum.VerticalAlignment.Center
     accessLayout.Padding = UDim.new(0, 8)
 
+    local selectedAccessMode = "Free"
+
     local function createAccessButton(text, iconKey, primary)
         local button = Instance.new("TextButton")
         button.Size = UDim2.new(0.5, -4, 1, 0)
@@ -2135,7 +2210,7 @@ local function BuildKeyUI()
         local icon = Instance.new("ImageLabel")
         icon.Size = UDim2.fromOffset(18, 18)
         icon.BackgroundTransparency = 1
-        icon.Image = getIcon(iconKey)
+        icon.Image = getIcon(iconKey) or getIcon("shield")
         icon.ImageColor3 = Isnow.Theme.Text
         icon.LayoutOrder = 1
         icon.Parent = button
@@ -2162,8 +2237,8 @@ local function BuildKeyUI()
         return button
     end
 
-    local freeAccessBtn = createAccessButton("Free", "unlock", false)
-    local premiumAccessBtn = createAccessButton("Premium", "crown", true)
+    local freeAccessBtn = createAccessButton("Free Version", "key", false)
+    local premiumAccessBtn = createAccessButton("Premium Version", "shield", true)
 
     local inputStartY = contentStartY + statusHeight + 10
 
@@ -2189,7 +2264,7 @@ local function BuildKeyUI()
     textBox.BackgroundTransparency = 1
     textBox.Text = ""
     textBox.TextColor3 = Isnow.Theme.Text
-    textBox.PlaceholderText = "Enter your key..."
+    textBox.PlaceholderText = "Enter Your Free Key"
     textBox.PlaceholderColor3 = Isnow.Theme.TextDim
     textBox.TextSize = mobile and 17 or 18
     textBox.Font = Enum.Font.ArimoBold
@@ -2569,7 +2644,13 @@ local function BuildKeyUI()
         redeemBtn.Active = true
         if valid then
             saveKey(key) getgenv().SCRIPT_KEY = key getgenv().IsnowLoaded = false
-            setStatus("success") Isnow:Notify("Success", "Key validated successfully!", 2, "success") task.wait(1)
+            local runtimeEnv = getgenv()
+            local runtimeIsPremium = runtimeEnv.JD_IS_PREMIUM == true
+            local runtimeTier = runtimeIsPremium and "Premium" or "Standard"
+            local runtimeExpiry = runtimeEnv.JD_EXPIRES_AT or "Unknown"
+            setStatus("success", runtimeTier .. " Version")
+            Isnow:Notify("Access " .. runtimeTier .. " Key", "Duration - " .. tostring(runtimeExpiry), 4, "success")
+            task.wait(1)
             closeDoorsThenExit(function()
                 disableBlur()
                 TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
@@ -2583,12 +2664,14 @@ local function BuildKeyUI()
         end
     end
 
-    local function showPremiumControls()
+    local function showAccessControls(mode)
+        selectedAccessMode = mode
         accessSelector.Visible = false
         statusLabel.Visible = true
-        statusLabel.Text = "Premium access selected"
-        statusIcon.Image = getIcon("crown")
-        statusIcon.ImageColor3 = Isnow.Theme.Accent
+        statusLabel.Text = mode == "Premium" and "Premium Version" or "Free Version"
+        statusIcon.Image = mode == "Premium" and (getIcon("shield") or getIcon("key")) or (getIcon("key") or getIcon("shield"))
+        statusIcon.ImageColor3 = mode == "Premium" and Isnow.Theme.Accent or Isnow.Theme.StatusIdle
+        textBox.PlaceholderText = mode == "Premium" and "Enter Your Premium Key" or "Enter Your Free Key"
         inputFrame.Visible = true
         dividerLine.Visible = true
         acquireBtn.Visible = true
@@ -2596,10 +2679,12 @@ local function BuildKeyUI()
     end
 
     freeAccessBtn.MouseButton1Click:Connect(function()
-        handleKeylessSkip()
+        showAccessControls("Free")
     end)
 
-    premiumAccessBtn.MouseButton1Click:Connect(showPremiumControls)
+    premiumAccessBtn.MouseButton1Click:Connect(function()
+        showAccessControls("Premium")
+    end)
     redeemBtn.MouseButton1Click:Connect(handleRedeem)
     acquireBtn.MouseButton1Click:Connect(function()
         if Isnow.Options.NoGetKey then
