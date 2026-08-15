@@ -11370,16 +11370,25 @@ function Library:CreateWindow(WindowInfo)
             end
         end
 
-        --// Warning Box \\--
-        local WarningBoxHolder = New("Frame", {
+        --// User Panel Box \\--
+        --
+        -- The original WarningBox frame remains the tab-level surface.  The
+        -- content inside it is intentionally rebuilt as a user/game panel:
+        -- optional circular avatar, greeting title, username, and an arbitrary
+        -- number of information rows.  The old warning API remains available
+        -- below as a compatibility wrapper.
+        local UserPanelBoxHolder = New("Frame", {
             AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(0, 7),
             Size = UDim2.fromScale(1, 0),
-            Visible = false,
+            Visible = true,
             Parent = TabContainer,
         })
 
+        -- Keep the original local names because the tab layout code uses this
+        -- surface as the first block above the left/right content columns.
+        local WarningBoxHolder = UserPanelBoxHolder
         local WarningBox
         local WarningBoxOutline
         local WarningBoxShadowOutline
@@ -11387,6 +11396,16 @@ function Library:CreateWindow(WindowInfo)
         local WarningTitle
         local WarningStroke
         local WarningText
+
+        local UserPanelAvatar
+        local UserPanelAvatarStroke
+        local UserPanelContent
+        local UserPanelContentLayout
+        local UserPanelInformation
+        local UserPanelInformationLayout
+        local UserPanelInformationLabels = {}
+        local UserPanelAvatarRequest = 0
+
         do
             WarningBox = New("Frame", {
                 BackgroundColor3 = "BackgroundColor",
@@ -11413,52 +11432,278 @@ function Library:CreateWindow(WindowInfo)
                 Parent = WarningBox,
             })
             New("UIPadding", {
-                PaddingBottom = UDim.new(0, 4),
-                PaddingLeft = UDim.new(0, 6),
-                PaddingRight = UDim.new(0, 6),
-                PaddingTop = UDim.new(0, 4),
+                PaddingBottom = UDim.new(0, 8),
+                PaddingLeft = UDim.new(0, 10),
+                PaddingRight = UDim.new(0, 10),
+                PaddingTop = UDim.new(0, 8),
                 Parent = WarningBoxScrollingFrame,
             })
 
+            -- The avatar is deliberately a square ImageLabel with a full
+            -- UICorner radius.  This keeps the image circular without adding
+            -- another masking frame or changing the original surface.
+            UserPanelAvatar = New("ImageLabel", {
+                AnchorPoint = Vector2.new(0, 0.5),
+                BackgroundColor3 = "MainColor",
+                BackgroundTransparency = 0,
+                Image = "",
+                ImageColor3 = Color3.new(1, 1, 1),
+                ImageTransparency = 0,
+                Position = UDim2.new(0, 10, 0.5, 0),
+                Size = UDim2.fromOffset(64, 64),
+                ScaleType = Enum.ScaleType.Crop,
+                Visible = false,
+                Parent = WarningBox,
+            })
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(1, 0),
+                    Parent = UserPanelAvatar,
+                })
+            )
+            UserPanelAvatarStroke = New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                Color = "OutlineColor",
+                Thickness = 1,
+                Transparency = 0,
+                Parent = UserPanelAvatar,
+            })
+
+            UserPanelContent = New("Frame", {
+                AnchorPoint = Vector2.new(0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(0, 8),
+                Size = UDim2.new(1, -4, 0, 0),
+                Parent = WarningBoxScrollingFrame,
+            })
+            UserPanelContentLayout = New("UIListLayout", {
+                Padding = UDim.new(0, 2),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Parent = UserPanelContent,
+            })
+
+            -- Title is the prominent greeting line.  When Username is enabled
+            -- it becomes, for example, "Good Afternoon, @Player!".
             WarningTitle = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, -4, 0, 14),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                LayoutOrder = 1,
+                Size = UDim2.new(1, 0, 0, 0),
                 Text = "",
-                TextColor3 = Color3.fromRGB(255, 50, 50),
-                TextSize = 14,
+                TextColor3 = "FontColor",
+                TextSize = 17,
+                TextWrapped = true,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = WarningBoxScrollingFrame,
+                TextYAlignment = Enum.TextYAlignment.Center,
+                Parent = UserPanelContent,
             })
-
             WarningStroke = New("UIStroke", {
                 ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = Color3.fromRGB(169, 0, 0),
+                Color = "OutlineColor",
                 LineJoinMode = Enum.LineJoinMode.Miter,
+                Transparency = 0.8,
                 Parent = WarningTitle,
             })
 
+            -- WarningText remains the first information label for compatibility
+            -- with code that inspects the old object.  Its actual text is kept
+            -- empty; information rows are generated beneath it as needed.
             WarningText = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(0, 16),
-                Size = UDim2.new(1, -4, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                LayoutOrder = 2,
+                Size = UDim2.new(1, 0, 0, 0),
                 Text = "",
+                TextColor3 = "FontColor",
                 TextSize = 14,
                 TextWrapped = true,
-                Parent = WarningBoxScrollingFrame,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextYAlignment = Enum.TextYAlignment.Top,
+                Visible = false,
+                Parent = UserPanelContent,
             })
 
-            New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = "DarkColor",
-                LineJoinMode = Enum.LineJoinMode.Miter,
-                Parent = WarningText,
+            UserPanelInformation = New("Frame", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                LayoutOrder = 3,
+                Size = UDim2.new(1, 0, 0, 0),
+                Parent = UserPanelContent,
+            })
+            UserPanelInformationLayout = New("UIListLayout", {
+                Padding = UDim.new(0, 1),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = UserPanelInformation,
             })
         end
 
-        --// Tab Table \\--
-        local Tab = {
+        local function ResolveUserPanelUsername(Value)
+            if Value == true then
+                return "@" .. tostring(LocalPlayer.Name)
+            end
+            if typeof(Value) == "Instance" and Value:IsA("Player") then
+                return "@" .. tostring(Value.Name)
+            end
+            if typeof(Value) == "string" then
+                if Value == "" then
+                    return ""
+                end
+                return Value:sub(1, 1) == "@" and Value or "@" .. Value
+            end
+            return ""
+        end
+
+        local function ResolveUserPanelAvatar(Value)
+            if Value == true then
+                return LocalPlayer.UserId
+            end
+            if typeof(Value) == "Instance" and Value:IsA("Player") then
+                return Value.UserId
+            end
+            if typeof(Value) == "number" then
+                return Value
+            end
+            if typeof(Value) == "string" then
+                if Value:find("rbxassetid://", 1, true) or Value:find("http", 1, true) then
+                    return Value
+                end
+                return tonumber(Value)
+            end
+            return nil
+        end
+
+        local function FormatUserPanelRow(Label, Value)
+            if Value == nil then
+                return tostring(Label or "")
+            end
+            if Label == nil or tostring(Label) == "" then
+                return tostring(Value)
+            end
+            return string.format("%s: %s", tostring(Label), tostring(Value))
+        end
+
+        local function NormalizeUserPanelInformation(Information)
+            local Rows = {}
+            if Information == nil then
+                return Rows
+            end
+
+            if typeof(Information) ~= "table" then
+                table.insert(Rows, tostring(Information))
+                return Rows
+            end
+
+            if #Information > 0 then
+                for _, Entry in ipairs(Information) do
+                    if typeof(Entry) == "table" then
+                        local Label = Entry.Label or Entry.Name or Entry.Title or Entry[1]
+                        local Value = Entry.Value or Entry.Text or Entry.Content or Entry[2]
+                        if Value == nil and Label == nil then
+                            local Parts = {}
+                            for Key, Item in pairs(Entry) do
+                                table.insert(Parts, FormatUserPanelRow(Key, Item))
+                            end
+                            table.sort(Parts)
+                            table.insert(Rows, table.concat(Parts, "  •  "))
+                        else
+                            table.insert(Rows, FormatUserPanelRow(Label, Value))
+                        end
+                    else
+                        table.insert(Rows, tostring(Entry))
+                    end
+                end
+            else
+                local Parts = {}
+                for Label, Value in pairs(Information) do
+                    table.insert(Parts, FormatUserPanelRow(Label, Value))
+                end
+                table.sort(Parts)
+                for _, Row in ipairs(Parts) do
+                    table.insert(Rows, Row)
+                end
+            end
+
+            return Rows
+        end
+
+        local function ClearUserPanelInformation()
+            for _, Label in ipairs(UserPanelInformationLabels) do
+                if Label and Label.Parent then
+                    Label:Destroy()
+                end
+            end
+            table.clear(UserPanelInformationLabels)
+        end
+
+        local function RenderUserPanelInformation(Information)
+            ClearUserPanelInformation()
+            local Rows = NormalizeUserPanelInformation(Information)
+            for Index, Row in ipairs(Rows) do
+                local Label = New("TextLabel", {
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    BackgroundTransparency = 1,
+                    LayoutOrder = Index,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    Text = "• " .. tostring(Row),
+                    TextColor3 = "FontColor",
+                    TextSize = 13,
+                    TextWrapped = true,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextYAlignment = Enum.TextYAlignment.Top,
+                    Parent = UserPanelInformation,
+                })
+                table.insert(UserPanelInformationLabels, Label)
+                if not Library.Registry[Label] then
+                    Library:AddToRegistry(Label, {})
+                end
+            end
+        end
+
+        local function RenderUserPanelAvatar(Value)
+            UserPanelAvatarRequest += 1
+            local Request = UserPanelAvatarRequest
+            local Resolved = ResolveUserPanelAvatar(Value)
+
+            UserPanelAvatar.Visible = false
+            UserPanelAvatar.Image = ""
+
+            if Resolved == nil then
+                return
+            end
+
+            if typeof(Resolved) == "string" then
+                UserPanelAvatar.Image = Resolved
+                UserPanelAvatar.Visible = true
+                return
+            end
+
+            UserPanelAvatar.Visible = true
+            task.spawn(function()
+                local Success, Image = pcall(function()
+                    local ThumbnailType = Enum.ThumbnailType.HeadShot
+                    local ThumbnailSize = Enum.ThumbnailSize.Size100x100
+                    local Content, IsReady = Players:GetUserThumbnailAsync(Resolved, ThumbnailType, ThumbnailSize)
+                    return Content, IsReady
+                end)
+
+                if Request ~= UserPanelAvatarRequest or not UserPanelAvatar.Parent then
+                    return
+                end
+
+                if Success and Image then
+                    UserPanelAvatar.Image = Image
+                else
+                    UserPanelAvatar.Visible = false
+                end
+            end)
+        end
+
+        --// Tab Table \--
+        local Tab
+        Tab = {
             Description = Description,
 
             Connections = {},
@@ -11470,12 +11715,14 @@ function Library:CreateWindow(WindowInfo)
                 TabLeft,
                 TabRight,
             },
-            WarningBox = {
-                IsNormal = false,
+
+            UserPanelState = {
+                IsNormal = true,
                 LockSize = false,
-                Visible = false,
-                Title = "WARNING",
-                Text = "",
+                Title = "",
+                Username = "",
+                UserIcon = nil,
+                Information = {},
             },
 
             Groupboxes = {},
@@ -11484,44 +11731,28 @@ function Library:CreateWindow(WindowInfo)
 
             Type = "Tab",
             Name = Name,
-            SubTabs = {},
-            ActiveSubTab = nil,
         }
 
-        function Tab:UpdateWarningBox(Info)
-            if typeof(Info.IsNormal) == "boolean" then
-                Tab.WarningBox.IsNormal = Info.IsNormal
-            end
-            if typeof(Info.LockSize) == "boolean" then
-                Tab.WarningBox.LockSize = Info.LockSize
-            end
-            if typeof(Info.Visible) == "boolean" then
-                Tab.WarningBox.Visible = Info.Visible
-            end
-            if typeof(Info.Title) == "string" then
-                Tab.WarningBox.Title = Info.Title
-            end
-            if typeof(Info.Text) == "string" then
-                Tab.WarningBox.Text = Info.Text
-            end
+        -- Backwards-compatible state alias for scripts that only inspect the
+        -- old warning table.  The public API is UserPanelBox.
+        Tab.WarningBox = Tab.UserPanelState
 
-            WarningBoxHolder.Visible = Tab.WarningBox.Visible
-            WarningTitle.Text = Tab.WarningBox.Title
-            WarningText.Text = Tab.WarningBox.Text
-            Tab:Resize(true)
+        function Tab:RefreshUserPanelTheme()
+            local State = Tab.UserPanelState
+            local IsNormal = State.IsNormal == true
+            local PanelBackground = IsNormal and Library.Scheme.BackgroundColor or Color3.fromRGB(127, 0, 0)
+            local PanelShadow = IsNormal and Library.Scheme.DarkColor or Color3.fromRGB(85, 0, 0)
+            local PanelOutline = IsNormal and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
+            local TextColor = IsNormal and Library.Scheme.FontColor or Color3.fromRGB(255, 50, 50)
+            local AvatarBackground = IsNormal and Library.Scheme.MainColor or Color3.fromRGB(95, 0, 0)
 
-            WarningBox.BackgroundColor3 = Tab.WarningBox.IsNormal == true and Library.Scheme.BackgroundColor
-                or Color3.fromRGB(127, 0, 0)
-
-            WarningBoxShadowOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.DarkColor
-                or Color3.fromRGB(85, 0, 0)
-            WarningBoxOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
-                or Color3.fromRGB(255, 50, 50)
-
-            WarningTitle.TextColor3 = Tab.WarningBox.IsNormal == true and Library.Scheme.FontColor
-                or Color3.fromRGB(255, 50, 50)
-            WarningStroke.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
-                or Color3.fromRGB(169, 0, 0)
+            WarningBox.BackgroundColor3 = PanelBackground
+            WarningBoxShadowOutline.Color = PanelShadow
+            WarningBoxOutline.Color = PanelOutline
+            WarningTitle.TextColor3 = TextColor
+            WarningStroke.Color = PanelOutline
+            UserPanelAvatar.BackgroundColor3 = AvatarBackground
+            UserPanelAvatarStroke.Color = PanelOutline
 
             if not Library.Registry[WarningBox] then
                 Library:AddToRegistry(WarningBox, {})
@@ -11538,25 +11769,52 @@ function Library:CreateWindow(WindowInfo)
             if not Library.Registry[WarningStroke] then
                 Library:AddToRegistry(WarningStroke, {})
             end
+            if not Library.Registry[UserPanelAvatar] then
+                Library:AddToRegistry(UserPanelAvatar, {})
+            end
+            if not Library.Registry[UserPanelAvatarStroke] then
+                Library:AddToRegistry(UserPanelAvatarStroke, {})
+            end
 
             Library.Registry[WarningBox].BackgroundColor3 = function()
-                return Tab.WarningBox.IsNormal == true and Library.Scheme.BackgroundColor or Color3.fromRGB(127, 0, 0)
+                local Current = Tab.UserPanelState.IsNormal == true
+                return Current and Library.Scheme.BackgroundColor or Color3.fromRGB(127, 0, 0)
             end
-
             Library.Registry[WarningBoxShadowOutline].Color = function()
-                return Tab.WarningBox.IsNormal == true and Library.Scheme.DarkColor or Color3.fromRGB(85, 0, 0)
+                local Current = Tab.UserPanelState.IsNormal == true
+                return Current and Library.Scheme.DarkColor or Color3.fromRGB(85, 0, 0)
             end
-
             Library.Registry[WarningBoxOutline].Color = function()
-                return Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
+                local Current = Tab.UserPanelState.IsNormal == true
+                return Current and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
             end
-
             Library.Registry[WarningTitle].TextColor3 = function()
-                return Tab.WarningBox.IsNormal == true and Library.Scheme.FontColor or Color3.fromRGB(255, 50, 50)
+                local Current = Tab.UserPanelState.IsNormal == true
+                return Current and Library.Scheme.FontColor or Color3.fromRGB(255, 50, 50)
+            end
+            Library.Registry[WarningStroke].Color = function()
+                local Current = Tab.UserPanelState.IsNormal == true
+                return Current and Library.Scheme.OutlineColor or Color3.fromRGB(169, 0, 0)
+            end
+            Library.Registry[UserPanelAvatar].BackgroundColor3 = function()
+                local Current = Tab.UserPanelState.IsNormal == true
+                return Current and Library.Scheme.MainColor or Color3.fromRGB(95, 0, 0)
+            end
+            Library.Registry[UserPanelAvatarStroke].Color = function()
+                local Current = Tab.UserPanelState.IsNormal == true
+                return Current and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
             end
 
-            Library.Registry[WarningStroke].Color = function()
-                return Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(169, 0, 0)
+            for _, Label in ipairs(UserPanelInformationLabels) do
+                if Label and Label.Parent then
+                    if not Library.Registry[Label] then
+                        Library:AddToRegistry(Label, {})
+                    end
+                    Library.Registry[Label].TextColor3 = function()
+                        local Current = Tab.UserPanelState.IsNormal == true
+                        return Current and Library.Scheme.FontColor or Color3.fromRGB(255, 220, 220)
+                    end
+                end
             end
         end
 
@@ -11567,34 +11825,107 @@ function Library:CreateWindow(WindowInfo)
                 Side.Size = UDim2.new(0.5, -3, 1, -Offset)
             end
 
-            for _, SubTab in Tab.SubTabs do
-                SubTab:RefreshSides()
-            end
         end
 
-        function Tab:Resize(ResizeWarningBox: boolean?)
-            if ResizeWarningBox then
-                local MaximumSize = math.floor(TabContainer.AbsoluteSize.Y / 3.25)
-                local _, YText = Library:GetTextBounds(
-                    WarningText.Text,
-                    Library.Scheme.Font,
-                    WarningText.TextSize,
-                    WarningText.AbsoluteSize.X
-                )
+        function Tab:Resize(ResizeUserPanelBox: boolean?)
+            if ResizeUserPanelBox then
+                local CurrentState = Tab.UserPanelState
+                local ContentHeight = UserPanelContentLayout.AbsoluteContentSize.Y
+                local HasAvatar = UserPanelAvatar.Visible
+                local MinimumHeight = HasAvatar and 82 or 42
+                local DesiredHeight = math.max(MinimumHeight, ContentHeight + 16)
+                local MaximumSize = math.max(120, math.floor(TabContainer.AbsoluteSize.Y * 0.52))
 
-                local YBox = 24 + YText
-                if Tab.WarningBox.LockSize == true and YBox >= MaximumSize then
-                    WarningBoxScrollingFrame.CanvasSize = UDim2.fromOffset(0, YBox)
-                    YBox = MaximumSize
+                if CurrentState.LockSize == true and DesiredHeight >= MaximumSize then
+                    WarningBoxScrollingFrame.CanvasSize = UDim2.fromOffset(0, DesiredHeight + 12)
+                    DesiredHeight = MaximumSize
                 else
                     WarningBoxScrollingFrame.CanvasSize = UDim2.fromOffset(0, 0)
                 end
 
-                WarningText.Size = UDim2.new(1, -4, 0, YText)
-                WarningBox.Size = UDim2.new(1, -5, 0, YBox + 4)
+                UserPanelContent.Position = UDim2.fromOffset(HasAvatar and 84 or 0, 8)
+                UserPanelContent.Size = UDim2.new(1, HasAvatar and -84 or -4, 0, ContentHeight)
+                WarningBox.Size = UDim2.new(1, -5, 0, DesiredHeight)
             end
 
             Tab:RefreshSides()
+        end
+
+        function Tab:UserPanelBox(Info)
+            Info = Info or {}
+            local State = Tab.UserPanelState
+
+            if typeof(Info.IsNormal) == "boolean" then
+                State.IsNormal = Info.IsNormal
+            end
+            if typeof(Info.LockSize) == "boolean" then
+                State.LockSize = Info.LockSize
+            end
+            if Info.Title ~= nil then
+                State.Title = tostring(Info.Title)
+            end
+            if Info.Username ~= nil then
+                State.Username = ResolveUserPanelUsername(Info.Username)
+            end
+            if Info.UserIcon ~= nil then
+                State.UserIcon = Info.UserIcon
+            end
+            if Info.Information ~= nil then
+                State.Information = Info.Information
+            elseif Info.Text ~= nil then
+                -- Text is accepted so old WarningBox calls can be migrated
+                -- incrementally without losing their message content.
+                State.Information = Info.Text
+            end
+
+            local Greeting = State.Title
+            if State.Username ~= "" then
+                if Greeting ~= "" then
+                    Greeting = string.format("%s, %s!", Greeting, State.Username)
+                else
+                    Greeting = State.Username
+                end
+            end
+
+            WarningBoxHolder.Visible = true
+            WarningTitle.Text = Greeting
+            WarningText.Text = ""
+            RenderUserPanelAvatar(State.UserIcon)
+            RenderUserPanelInformation(State.Information)
+            Tab:RefreshUserPanelTheme()
+            Tab:Resize(true)
+
+            -- AutomaticSize updates on the next render step.  A deferred second
+            -- resize prevents clipped rows when the information contains long
+            -- wrapped text or a thumbnail request finishes asynchronously.
+            task.defer(function()
+                if not Tab.Destroyed then
+                    Tab:Resize(true)
+                end
+            end)
+
+            return Tab
+        end
+
+        function Tab:UpdateUserPanelBox(Info)
+            return self:UserPanelBox(Info)
+        end
+
+        function Tab:GetUserPanelBox()
+            return Tab.UserPanelState
+        end
+
+        -- Compatibility wrapper.  New code should call UserPanelBox instead.
+        function Tab:UpdateWarningBox(Info)
+            Info = Info or {}
+            return self:UserPanelBox({
+                IsNormal = Info.IsNormal,
+                LockSize = Info.LockSize,
+                Title = Info.Title or "WARNING",
+                Information = Info.Information or Info.Text,
+                Username = Info.Username,
+                UserIcon = Info.UserIcon,
+            })
         end
 
         local function AddTabbox(self, Info)
