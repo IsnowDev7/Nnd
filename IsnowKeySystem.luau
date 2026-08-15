@@ -2066,7 +2066,7 @@ local function BuildKeyUI()
     local statusHeight = mobile and math.clamp(60 * scale, 52, 68) or 60
     local userPanelWidth = mobile and math.clamp(190 * scale, 160, 220) or 236
     local changelogPanelWidth = mobile and math.clamp(230 * scale, 190, 260) or 290
-    local gap = mobile and 8 or 12
+    local gap = mobile and 10 or 26
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "IsnowKeySystem"
@@ -2178,8 +2178,8 @@ local function BuildKeyUI()
 
     local accessSelector = Instance.new("Frame")
     accessSelector.Name = "AccessSelector"
-    accessSelector.Size = UDim2.new(1, -64, 1, -16)
-    accessSelector.Position = UDim2.new(0, 52, 0.5, 0)
+    accessSelector.Size = UDim2.new(1, -76, 1, -14)
+    accessSelector.Position = UDim2.new(0, 58, 0.5, 0)
     accessSelector.AnchorPoint = Vector2.new(0, 0.5)
     accessSelector.BackgroundTransparency = 1
     accessSelector.Parent = statusFrame
@@ -2188,13 +2188,13 @@ local function BuildKeyUI()
     accessLayout.FillDirection = Enum.FillDirection.Horizontal
     accessLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     accessLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    accessLayout.Padding = UDim.new(0, 8)
+    accessLayout.Padding = UDim.new(0, 10)
 
     local selectedAccessMode = "Free"
 
     local function createAccessButton(text, iconKey, primary)
         local button = Instance.new("TextButton")
-        button.Size = UDim2.new(0.5, -4, 1, 0)
+        button.Size = UDim2.new(0.5, -5, 1, 0)
         button.BackgroundColor3 = primary and Isnow.Theme.Accent or Isnow.Theme.Background
         button.BorderSizePixel = 0
         button.AutoButtonColor = false
@@ -2216,14 +2216,15 @@ local function BuildKeyUI()
         icon.Parent = button
 
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -26, 1, 0)
-        label.Position = UDim2.new(0, 26, 0, 0)
+        label.Size = UDim2.new(1, -30, 1, 0)
+        label.Position = UDim2.new(0, 30, 0, 0)
         label.BackgroundTransparency = 1
         label.Text = text
         label.TextColor3 = Isnow.Theme.Text
-        label.TextSize = mobile and 13 or 14
+        label.TextSize = mobile and 12 or 13
         label.Font = Enum.Font.ArimoBold
-        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.TextXAlignment = Enum.TextXAlignment.Center
+        label.TextTruncate = Enum.TextTruncate.AtEnd
         label.Parent = button
 
         local normalColor = button.BackgroundColor3
