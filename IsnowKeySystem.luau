@@ -182,10 +182,20 @@ local function scanGameById(gameId)
     gameId = tostring(gameId or ""):match("%d+") or ""
     if gameId == "" then return nil, nil end
     if GameMetadataCache[gameId] then
-        return GameMetadataCache[gameId].Name, GameMetadataCache[gameId].Icon
+        local cached = GameMetadataCache[gameId]
+        return cached.Name, cached.Icon, cached.Images or {cached.Icon}
     end
 
     local gameName, gameIcon, universeId
+    local imageCandidates = {}
+    local function addCandidate(value)
+        if value and value ~= "" then
+            for _, existing in ipairs(imageCandidates) do
+                if existing == value then return end
+            end
+            table.insert(imageCandidates, value)
+        end
+    end
     local function requestJson(url)
         local response
         local ok = pcall(function()
@@ -212,10 +222,24 @@ local function scanGameById(gameId)
         end
         local icons = requestJson("https://thumbnails.roblox.com/v1/games/icons?universeIds=" .. tostring(universeId) .. "&size=512x512&format=Png&isCircular=false")
         if icons and icons.data and icons.data[1] and icons.data[1].state == "Completed" then
-            -- ImageLabel cannot use the external CDN URL directly; use Roblox's native thumbnail URI.
-            gameIcon = "rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512"
+            -- Keep the native Roblox URI; external CDN image URLs are not valid ImageLabel sources.
+            addCandidate("rbxthumb://type=GameIcon&id=" .. tostring(universeId) .. "&w=512&h=512")
+        end
+        local thumbnails = requestJson("https://thumbnails.roblox.com/v1/games/thumbnails?universeIds=" .. tostring(universeId) .. "&count=10&size=768x432&format=Png&isCircular=false")
+        if thumbnails and thumbnails.data then
+            for _, thumbnail in ipairs(thumbnails.data) do
+                if thumbnail.state == "Completed" then
+                    addCandidate("rbxthumb://type=GameThumbnail&id=" .. tostring(universeId) .. "&w=768&h=432")
+                    break
+                end
+            end
         end
     end
+
+    -- Include both place-ID and universe-ID forms because Roblox thumbnail
+    -- availability can differ between games and thumbnail types.
+    addCandidate("rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512")
+    addCandidate("rbxthumb://type=GameThumbnail&id=" .. gameId .. "&w=768&h=432")
 
     if not gameName then
         pcall(function()
@@ -223,12 +247,11 @@ local function scanGameById(gameId)
             if info and info.Name then gameName = info.Name end
         end)
     end
-    if not gameIcon then
-        gameIcon = "rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512"
-    end
+    gameIcon = imageCandidates[1] or ("rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512")
+    addCandidate(gameIcon)
 
-    GameMetadataCache[gameId] = {Name = gameName, Icon = gameIcon}
-    return gameName, gameIcon
+    GameMetadataCache[gameId] = {Name = gameName, Icon = gameIcon, Images = imageCandidates}
+    return gameName, gameIcon, imageCandidates
 end
 
 local function resolveGameMetadata(gameId)
@@ -1180,11 +1203,16 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
         entryLayout.Padding = UDim.new(0, 5)
 
         local gameId = update.GameID or Isnow.Game.GameID
-        local resolvedGameName, resolvedGameIcon = resolveGameMetadata(gameId)
+        local resolvedGameName, resolvedGameIcon, resolvedGameImages = resolveGameMetadata(gameId)
         local imageAsset = materializeImageSource(update.Image or Isnow.Changelog.Image)
-        if imageAsset == "" and (update.GameIcon == true or (update.GameIcon == nil and Isnow.Game.GameIcon == true)) then
-            imageAsset = resolvedGameIcon or ""
+        local imageSources = {}
+        if imageAsset ~= "" then table.insert(imageSources, imageAsset) end
+        if update.GameIcon == true or (update.GameIcon == nil and Isnow.Game.GameIcon == true) then
+            for _, candidate in ipairs(resolvedGameImages or {resolvedGameIcon}) do
+                if candidate and candidate ~= "" then table.insert(imageSources, materializeImageSource(candidate)) end
+            end
         end
+        imageAsset = imageSources[1] or ""
         local displayGameName = nil
         if type(update.GameName) == "string" and update.GameName ~= "" then
             displayGameName = update.GameName
@@ -1209,6 +1237,20 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
             updateImage.ScaleType = Enum.ScaleType.Crop
             updateImage.Parent = imageFrame
             Instance.new("UICorner", updateImage).CornerRadius = UDim.new(0, 6)
+
+            -- Try every scanner result until Roblox accepts one for rendering.
+            if #imageSources > 1 then
+                task.spawn(function()
+                    local contentProvider = game:GetService("ContentProvider")
+                    for _, candidate in ipairs(imageSources) do
+                        updateImage.Image = candidate
+                        local loaded = pcall(function()
+                            contentProvider:PreloadAsync({updateImage})
+                        end)
+                        if loaded then break end
+                    end
+                end)
+            end
 
             if joinEnabled and joinLink then
                 local joinButton = Instance.new("TextButton")
@@ -1818,7 +1860,7 @@ local function BuildKeylessUI()
     local windowHeight = 265
     local userPanelWidth = 200
     local changelogPanelWidth = 250
-    local gap = 12
+    local gap = 24
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "IsnowKeylessSystem"
@@ -2149,7 +2191,7 @@ local function BuildKeyUI()
     local statusHeight = mobile and math.clamp(60 * scale, 52, 68) or 60
     local userPanelWidth = mobile and math.clamp(190 * scale, 160, 220) or 236
     local changelogPanelWidth = mobile and math.clamp(230 * scale, 190, 260) or 290
-    local gap = mobile and 16 or 70
+    local gap = mobile and 24 or 110
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "IsnowKeySystem"
