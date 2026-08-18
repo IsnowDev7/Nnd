@@ -6,11 +6,15 @@ local Isnow = loadstring(game:HttpGet(
 ))()
 
 Isnow.Appearance.Title = "Isnow"
-Isnow.Appearance.Subtitle = "Enter your key to continue"
+Isnow.Appearance.Subtitle = "Choose your access type"
 Isnow.Appearance.Icon = "rbxassetid://134697043118282"
 Isnow.Links.Discord = "Discord.gg/isnow"
 Isnow.Storage.FileName = "Isnow_Key"
--- Isnow.Options.KeylessUI = true
+
+-- Keep this false so the Free/Premium selector is displayed.
+-- The Free button uses the existing keyless-success flow.
+Isnow.Options.Keyless = false
+Isnow.Options.KeylessUI = true
 
 Isnow.Theme.Accent = Color3.fromRGB(110, 60, 255)
 Isnow.Theme.AccentHover = Color3.fromRGB(130, 90, 255)
@@ -32,6 +36,38 @@ Isnow.Shop = {
     Link = "https://isnow.example/premium"
 }
 
+-- Automatic game metadata for changelog cards.
+-- Leave Image empty when you want the UI to resolve the game thumbnail.
+Isnow.Game = {
+    GameID = "1029392",
+    GameIcon = true,
+    GameName = true
+}
+
+local function getJunkieRuntimeAccess()
+    local env = getgenv()
+    local expiresAt = env.JD_EXPIRES_AT
+    local isPremium = env.JD_IS_PREMIUM == true
+
+    if not expiresAt then
+        return {
+            Validated = false,
+            IsPremium = false,
+            IsStandard = false,
+            ExpiresAt = nil,
+            Tier = "Unvalidated"
+        }
+    end
+
+    return {
+        Validated = true,
+        IsPremium = isPremium,
+        IsStandard = not isPremium,
+        ExpiresAt = expiresAt,
+        Tier = isPremium and "Premium" or "Standard"
+    }
+end
+
 Isnow:SetChangelog({
     Enabled = true,
     Entries = {
@@ -39,19 +75,21 @@ Isnow:SetChangelog({
             Version = "2.3.0",
             Date = "Aug 13, 2026",
             Badge = "NEW",
-            Image = "rbxassetid://1234567890",
+            Image = "",
+            GameID = "1029392",
             Description = {
                 "Introduced the new Isnow Control Center",
                 "Added the Obsidian-style window frame and glow",
                 "Improved key-system layout and animations"
             },
-            JoinLink = "https://www.roblox.com/games/1234567890/Example-Game",
+            JoinLink = "https://www.roblox.com/games/1029392/Example-Game",
             JoinButton = true
         },
         {
             Version = "2.2.0",
             Date = "Aug 1, 2026",
-            Image = "rbxassetid://9876543210",
+            Image = "",
+            GameID = "1029392",
             Description = {
                 "Improved validation performance",
                 "Added new theme customization options"
@@ -60,6 +98,34 @@ Isnow:SetChangelog({
         }
     }
 })
+
+Isnow.Callbacks.OnSuccess = function()
+    local access = getJunkieRuntimeAccess()
+
+    if not access.Validated then
+        warn("[Isnow] Junkie validation completed, but JD_EXPIRES_AT was not available yet.")
+        return
+    end
+
+    print("[Isnow] Access tier: " .. access.Tier)
+    print("[Isnow] Expires at: " .. tostring(access.ExpiresAt))
+
+    if access.IsStandard then
+        print("[Isnow] Standard/Free key detected.")
+        -- Enable Standard features here.
+    elseif access.IsPremium then
+        print("[Isnow] Premium key detected.")
+        -- Enable Premium features here.
+    end
+end
+
+Isnow.Callbacks.OnFail = function(reason)
+    warn("[Isnow] Key validation failed: " .. tostring(reason))
+end
+
+Isnow.Callbacks.OnClose = function()
+    print("[Isnow] Key window closed.")
+end
 
 Isnow:LaunchJunkie({
     Service = "YOUR_SERVICE",
@@ -84,6 +150,11 @@ return Isnow
 --     JoinLink = "https://www.roblox.com/games/1234567890/Example-Game",
 --     JoinButton = true
 -- })
+
+-- Junkie runtime detector:
+-- getgenv().JD_EXPIRES_AT = expiry timestamp
+-- getgenv().JD_IS_PREMIUM = true for Premium, false for Standard/Free
+-- The helper returns Validated, IsPremium, IsStandard, ExpiresAt, and Tier.
 
 -- The source exposes these main settings:
 -- Isnow.Appearance, Isnow.Links, Isnow.Storage, Isnow.Options,

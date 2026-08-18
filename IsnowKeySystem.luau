@@ -29,6 +29,7 @@ local RunService = cloneref(game:GetService("RunService"))
 local Lighting = cloneref(game:GetService("Lighting"))
 local Players = cloneref(game:GetService("Players"))
 local TeleportService = cloneref(game:GetService("TeleportService"))
+local MarketplaceService = cloneref(game:GetService("MarketplaceService"))
 
 local hui = gethui()
 
@@ -42,7 +43,7 @@ local Isnow = {}
 --appearance
 Isnow.Appearance = {
     Title = "Isnow",
-    Subtitle = "Enter your key to continue",
+    Subtitle = "Choose your access type",
     Icon = "rbxassetid://95721401302279",
     IconSize = UDim2.new(0, 30, 0, 30)
 }
@@ -101,6 +102,12 @@ Isnow.Changelog = {
     Entries = {}
 }
 
+Isnow.Game = {
+    GameID = "",
+    GameIcon = false,
+    GameName = false
+}
+
 function Isnow:SetChangelog(config)
     if type(config) ~= "table" then
         self.Changelog = {Enabled = false, Entries = {}}
@@ -138,10 +145,117 @@ local function normalizeAssetId(asset)
     if asset == nil or asset == "" then return "" end
     asset = tostring(asset)
     if asset:match("^%d+$") then return "rbxassetid://" .. asset end
-    if asset:match("^rbxasset://") or asset:match("^rbxassetid://") or asset:match("^https?://") then
+    if asset:match("^rbxasset://") or asset:match("^rbxassetid://") or asset:match("^rbxthumb://") or asset:match("^https?://") then
         return asset
     end
     return asset
+end
+
+local function materializeImageSource(source)
+    source = normalizeAssetId(source)
+    if source == "" or not source:match("^https?://") then return source end
+
+    -- Roblox ImageLabels cannot render arbitrary CDN URLs directly. When the
+    -- executor exposes request/writefile/getcustomasset, cache the image locally.
+    local getAsset = getcustomasset or getsynasset
+    local httpRequest = request or (syn and syn.request) or (http and http.request)
+    if not (getAsset and writefile and httpRequest) then return source end
+
+    local safeName = source:gsub("[^%w]", "_"):sub(1, 80)
+    local fileName = "IsnowImage_" .. safeName .. ".png"
+    local ok, result = pcall(function()
+        if isfile and isfile(fileName) then
+            return getAsset(fileName)
+        end
+        local response = httpRequest({Url = source, Method = "GET"})
+        local body = response and (response.Body or response.body)
+        if not body then return source end
+        writefile(fileName, body)
+        return getAsset(fileName)
+    end)
+    return ok and result or source
+end
+
+local GameMetadataCache = {}
+
+local function scanGameById(gameId)
+    gameId = tostring(gameId or ""):match("%d+") or ""
+    if gameId == "" then return nil, nil end
+    if GameMetadataCache[gameId] then
+        local cached = GameMetadataCache[gameId]
+        return cached.Name, cached.Icon, cached.Images or {cached.Icon}
+    end
+
+    local gameName, gameIcon, universeId
+    local imageCandidates = {}
+    local function addCandidate(value)
+        if value and value ~= "" then
+            for _, existing in ipairs(imageCandidates) do
+                if existing == value then return end
+            end
+            table.insert(imageCandidates, value)
+        end
+    end
+    local function requestJson(url)
+        local response
+        local ok = pcall(function()
+            response = game:HttpGet(url)
+        end)
+        if not ok or not response then
+            ok = pcall(function()
+                response = HttpService:GetAsync(url)
+            end)
+        end
+        if not ok or not response then return nil end
+        local decoded
+        pcall(function() decoded = HttpService:JSONDecode(response) end)
+        return decoded
+    end
+
+    -- Convert the pasted place ID into a universe ID, then scan its details and icon.
+    local universeResponse = requestJson("https://apis.roblox.com/universes/v1/places/" .. gameId .. "/universe")
+    if universeResponse then universeId = universeResponse.universeId end
+    if universeId then
+        local details = requestJson("https://games.roblox.com/v1/games?universeIds=" .. tostring(universeId))
+        if details and details.data and details.data[1] then
+            gameName = details.data[1].name
+        end
+        local icons = requestJson("https://thumbnails.roblox.com/v1/games/icons?universeIds=" .. tostring(universeId) .. "&size=512x512&format=Png&isCircular=false")
+        if icons and icons.data and icons.data[1] and icons.data[1].state == "Completed" then
+            -- Keep the native Roblox URI; external CDN image URLs are not valid ImageLabel sources.
+            addCandidate("rbxthumb://type=GameIcon&id=" .. tostring(universeId) .. "&w=512&h=512")
+        end
+        local thumbnails = requestJson("https://thumbnails.roblox.com/v1/games/thumbnails?universeIds=" .. tostring(universeId) .. "&count=10&size=768x432&format=Png&isCircular=false")
+        if thumbnails and thumbnails.data then
+            for _, thumbnail in ipairs(thumbnails.data) do
+                if thumbnail.state == "Completed" then
+                    addCandidate("rbxthumb://type=GameThumbnail&id=" .. tostring(universeId) .. "&w=768&h=432")
+                    break
+                end
+            end
+        end
+    end
+
+    -- Include both place-ID and universe-ID forms because Roblox thumbnail
+    -- availability can differ between games and thumbnail types.
+    addCandidate("rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512")
+    addCandidate("rbxthumb://type=GameThumbnail&id=" .. gameId .. "&w=768&h=432")
+
+    if not gameName then
+        pcall(function()
+            local info = MarketplaceService:GetProductInfo(tonumber(gameId), Enum.InfoType.Asset)
+            if info and info.Name then gameName = info.Name end
+        end)
+    end
+    gameIcon = imageCandidates[1] or ("rbxthumb://type=GameIcon&id=" .. gameId .. "&w=512&h=512")
+    addCandidate(gameIcon)
+
+    GameMetadataCache[gameId] = {Name = gameName, Icon = gameIcon, Images = imageCandidates}
+    return gameName, gameIcon, imageCandidates
+end
+
+local function resolveGameMetadata(gameId)
+    return scanGameById(gameId)
 end
 
 local function getDescriptionList(update)
@@ -427,6 +541,26 @@ local function disableBlur()
         local existing = Lighting:FindFirstChild("IsnowKeySystemBlur")
         if existing then existing:Destroy() end
         Internal.BlurEffect = nil
+    end
+end
+
+local function fadeGuiTree(root, duration)
+    if not root then return end
+    local info = TweenInfo.new(duration or 0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+    local function fadeObject(object)
+        if object:IsA("GuiObject") then
+            local goals = {}
+            if object.BackgroundTransparency < 1 then goals.BackgroundTransparency = 1 end
+            if object:IsA("ImageLabel") or object:IsA("ImageButton") then goals.ImageTransparency = 1 end
+            if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then goals.TextTransparency = 1 end
+            if next(goals) then TweenService:Create(object, info, goals):Play() end
+        elseif object:IsA("UIStroke") then
+            TweenService:Create(object, info, {Transparency = 1}):Play()
+        end
+    end
+    fadeObject(root)
+    for _, object in ipairs(root:GetDescendants()) do
+        fadeObject(object)
     end
 end
 
@@ -1068,7 +1202,23 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
         local entryLayout = Instance.new("UIListLayout", entry)
         entryLayout.Padding = UDim.new(0, 5)
 
-        local imageAsset = normalizeAssetId(update.Image or Isnow.Changelog.Image)
+        local gameId = update.GameID or Isnow.Game.GameID
+        local resolvedGameName, resolvedGameIcon, resolvedGameImages = resolveGameMetadata(gameId)
+        local imageAsset = materializeImageSource(update.Image or Isnow.Changelog.Image)
+        local imageSources = {}
+        if imageAsset ~= "" then table.insert(imageSources, imageAsset) end
+        if update.GameIcon == true or (update.GameIcon == nil and Isnow.Game.GameIcon == true) then
+            for _, candidate in ipairs(resolvedGameImages or {resolvedGameIcon}) do
+                if candidate and candidate ~= "" then table.insert(imageSources, materializeImageSource(candidate)) end
+            end
+        end
+        imageAsset = imageSources[1] or ""
+        local displayGameName = nil
+        if type(update.GameName) == "string" and update.GameName ~= "" then
+            displayGameName = update.GameName
+        elseif update.GameName ~= false and (update.GameName == true or (update.GameName == nil and Isnow.Game.GameName == true)) then
+            displayGameName = resolvedGameName
+        end
         local joinLink = update.JoinLink or update.Join or Isnow.Changelog.JoinLink
         local joinEnabled = update.JoinButton == true or (update.JoinButton == nil and Isnow.Changelog.JoinButton == true)
         if imageAsset ~= "" then
@@ -1087,6 +1237,20 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
             updateImage.ScaleType = Enum.ScaleType.Crop
             updateImage.Parent = imageFrame
             Instance.new("UICorner", updateImage).CornerRadius = UDim.new(0, 6)
+
+            -- Try every scanner result until Roblox accepts one for rendering.
+            if #imageSources > 1 then
+                task.spawn(function()
+                    local contentProvider = game:GetService("ContentProvider")
+                    for _, candidate in ipairs(imageSources) do
+                        updateImage.Image = candidate
+                        local loaded = pcall(function()
+                            contentProvider:PreloadAsync({updateImage})
+                        end)
+                        if loaded then break end
+                    end
+                end)
+            end
 
             if joinEnabled and joinLink then
                 local joinButton = Instance.new("TextButton")
@@ -1112,10 +1276,44 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
             end
         end
 
+        if imageAsset == "" and joinEnabled and joinLink then
+            local joinRow = Instance.new("Frame")
+            joinRow.Size = UDim2.new(1, 0, 0, 34)
+            joinRow.BackgroundColor3 = Isnow.Theme.Input
+            joinRow.BorderSizePixel = 0
+            joinRow.LayoutOrder = 1
+            joinRow.Parent = entry
+            Instance.new("UICorner", joinRow).CornerRadius = UDim.new(0, 5)
+
+            local joinButton = Instance.new("TextButton")
+            joinButton.Size = UDim2.fromOffset(72, 24)
+            joinButton.Position = UDim2.new(1, -6, 0.5, 0)
+            joinButton.AnchorPoint = Vector2.new(1, 0.5)
+            joinButton.BackgroundColor3 = Isnow.Theme.Accent
+            joinButton.BorderSizePixel = 0
+            joinButton.Text = "Join"
+            joinButton.TextColor3 = Isnow.Theme.Text
+            joinButton.TextSize = 12
+            joinButton.Font = Enum.Font.ArimoBold
+            joinButton.AutoButtonColor = false
+            joinButton.Parent = joinRow
+            Instance.new("UICorner", joinButton).CornerRadius = UDim.new(0, 5)
+            joinButton.MouseEnter:Connect(function() TweenService:Create(joinButton, TweenInfo.new(0.15), {BackgroundColor3 = Isnow.Theme.AccentHover}):Play() end)
+            joinButton.MouseLeave:Connect(function() TweenService:Create(joinButton, TweenInfo.new(0.15), {BackgroundColor3 = Isnow.Theme.Accent}):Play() end)
+            joinButton.MouseButton1Click:Connect(function()
+                local placeId = extractPlaceId(joinLink)
+                if placeId then pcall(function() TeleportService:Teleport(placeId, Players.LocalPlayer) end) end
+            end)
+        end
+
         local versionLabel = Instance.new("TextLabel")
         versionLabel.Size = UDim2.new(1, 0, 0, 22)
         versionLabel.BackgroundTransparency = 1
-        versionLabel.Text = update.Version .. "  •  " .. update.Date
+        local versionText = tostring(update.Version or "Update") .. "  •  " .. tostring(update.Date or "")
+        if displayGameName and displayGameName ~= "" then
+            versionText = tostring(displayGameName) .. "  •  " .. versionText
+        end
+        versionLabel.Text = versionText
         versionLabel.TextColor3 = Isnow.Theme.Accent
         versionLabel.TextSize = 14
         versionLabel.Font = Enum.Font.ArimoBold
@@ -1662,7 +1860,7 @@ local function BuildKeylessUI()
     local windowHeight = 265
     local userPanelWidth = 200
     local changelogPanelWidth = 250
-    local gap = 12
+    local gap = 24
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "IsnowKeylessSystem"
@@ -1928,11 +2126,11 @@ local function BuildKeylessUI()
     closeBtn.MouseButton1Click:Connect(function()
         Isnow:Notify("Goodbye", "See you next time!", 2, "close")
         closeDoorsThenExit(function()
+            fadeGuiTree(container, 0.35)
+            TweenService:Create(container, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
+            task.wait(0.46)
             fullCleanup()
-            TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
-            TweenService:Create(main, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
-            task.wait(0.4) gui:Destroy()
+            if gui and gui.Parent then gui:Destroy() end
         end)
         if Isnow.Callbacks.OnClose then Isnow.Callbacks.OnClose() end
     end)
@@ -1943,10 +2141,10 @@ local function BuildKeylessUI()
         getgenv().IsnowLoaded = false
         closeDoorsThenExit(function()
             disableBlur()
-            TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
-            TweenService:Create(main, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
-            task.wait(0.4) gui:Destroy()
+            fadeGuiTree(container, 0.35)
+            TweenService:Create(container, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
+            task.wait(0.46)
+            if gui and gui.Parent then gui:Destroy() end
             if not Internal.IsJunkieMode and Isnow.Callbacks.OnSuccess then Isnow.Callbacks.OnSuccess() end
         end)
     end)
@@ -1993,7 +2191,7 @@ local function BuildKeyUI()
     local statusHeight = mobile and math.clamp(60 * scale, 52, 68) or 60
     local userPanelWidth = mobile and math.clamp(190 * scale, 160, 220) or 236
     local changelogPanelWidth = mobile and math.clamp(230 * scale, 190, 260) or 290
-    local gap = mobile and 8 or 12
+    local gap = mobile and 24 or 110
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "IsnowKeySystem"
@@ -2101,6 +2299,86 @@ local function BuildKeyUI()
     statusLabel.TextXAlignment = Enum.TextXAlignment.Left
     statusLabel.TextTruncate = Enum.TextTruncate.AtEnd
     statusLabel.Parent = statusFrame
+    statusLabel.Visible = false
+
+    local accessSelector = Instance.new("Frame")
+    accessSelector.Name = "AccessSelector"
+    accessSelector.Size = UDim2.new(1, -76, 1, -14)
+    accessSelector.Position = UDim2.new(0, 58, 0.5, 0)
+    accessSelector.AnchorPoint = Vector2.new(0, 0.5)
+    accessSelector.BackgroundTransparency = 1
+    accessSelector.Parent = statusFrame
+
+    local accessLayout = Instance.new("UIListLayout", accessSelector)
+    accessLayout.FillDirection = Enum.FillDirection.Horizontal
+    accessLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    accessLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    accessLayout.Padding = UDim.new(0, 10)
+
+    local selectedAccessMode = "Free"
+
+    local function createAccessButton(text, iconKey, primary)
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(0.5, -5, 1, 0)
+        button.BackgroundColor3 = primary and Isnow.Theme.Accent or Isnow.Theme.Background
+        button.BorderSizePixel = 0
+        button.AutoButtonColor = false
+        button.Text = ""
+        button.Parent = accessSelector
+        Instance.new("UICorner", button).CornerRadius = UDim.new(0, 5)
+
+        local stroke = Instance.new("UIStroke", button)
+        stroke.Color = primary and Isnow.Theme.AccentHover or Isnow.Theme.Accent
+        stroke.Thickness = 1
+        stroke.Transparency = primary and 0.25 or 0.55
+
+        local content = Instance.new("Frame")
+        content.Name = "CenteredContent"
+        content.Size = UDim2.new(1, -16, 1, 0)
+        content.Position = UDim2.new(0.5, 0, 0.5, 0)
+        content.AnchorPoint = Vector2.new(0.5, 0.5)
+        content.BackgroundTransparency = 1
+        content.Parent = button
+
+        local contentLayout = Instance.new("UIListLayout", content)
+        contentLayout.FillDirection = Enum.FillDirection.Horizontal
+        contentLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        contentLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        contentLayout.Padding = UDim.new(0, 7)
+
+        local icon = Instance.new("ImageLabel")
+        icon.Size = UDim2.fromOffset(18, 18)
+        icon.BackgroundTransparency = 1
+        icon.Image = getIcon(iconKey) or getIcon("shield")
+        icon.ImageColor3 = Isnow.Theme.Text
+        icon.LayoutOrder = 1
+        icon.Parent = content
+
+        local label = Instance.new("TextLabel")
+        label.AutomaticSize = Enum.AutomaticSize.X
+        label.Size = UDim2.new(0, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.TextColor3 = Isnow.Theme.Text
+        label.TextSize = mobile and 12 or 13
+        label.Font = Enum.Font.ArimoBold
+        label.TextXAlignment = Enum.TextXAlignment.Center
+        label.TextYAlignment = Enum.TextYAlignment.Center
+        label.Parent = content
+
+        local normalColor = button.BackgroundColor3
+        local hoverColor = primary and Isnow.Theme.AccentHover or Isnow.Theme.Input
+        button.MouseEnter:Connect(function()
+            TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor}):Play()
+        end)
+        button.MouseLeave:Connect(function()
+            TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = normalColor}):Play()
+        end)
+        return button
+    end
+
+    local freeAccessBtn = createAccessButton("Free", "key", false)
+    local premiumAccessBtn = createAccessButton("Premium", "shield", true)
 
     local inputStartY = contentStartY + statusHeight + 10
 
@@ -2126,7 +2404,7 @@ local function BuildKeyUI()
     textBox.BackgroundTransparency = 1
     textBox.Text = ""
     textBox.TextColor3 = Isnow.Theme.Text
-    textBox.PlaceholderText = "Enter your key..."
+    textBox.PlaceholderText = "Enter Your Free Key"
     textBox.PlaceholderColor3 = Isnow.Theme.TextDim
     textBox.TextSize = mobile and 17 or 18
     textBox.Font = Enum.Font.ArimoBold
@@ -2204,12 +2482,16 @@ local function BuildKeyUI()
     end
 
     local acquireBtn = createButton(Isnow.Options.NoGetKey and "Unavailable" or "Get Key", Isnow.Options.NoGetKey and "nogetkey" or "key", false, acquireStartY)
+    inputFrame.Visible = false
+    dividerLine.Visible = false
     if Isnow.Options.NoGetKey then
         acquireBtn.Active = false
         TweenService:Create(acquireBtn, TweenInfo.new(0), {BackgroundColor3 = Isnow.Theme.Pending}):Play()
     end
 
     local redeemBtn = createButton("Redeem Key", "shield", true, acquireStartY + buttonHeight + 5)
+    acquireBtn.Visible = false
+    redeemBtn.Visible = false
     local bottomY = acquireStartY + buttonHeight * 2 + 10
 
     local userBtn = Instance.new("TextButton")
@@ -2468,13 +2750,44 @@ local function BuildKeyUI()
     closeBtn.MouseButton1Click:Connect(function()
         Isnow:Notify("Goodbye", "See you next time!", 2, "close")
         closeDoorsThenExit(function()
+            fadeGuiTree(container, 0.35)
+            TweenService:Create(container, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
+            task.wait(0.46)
             fullCleanup()
-            TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
-            TweenService:Create(mainFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-            task.wait(0.4) screenGui:Destroy()
+            if screenGui and screenGui.Parent then screenGui:Destroy() end
             if Isnow.Callbacks.OnClose then Isnow.Callbacks.OnClose() end
         end)
     end)
+
+    local function formatRuntimeDuration(expiryValue)
+        local expiry = tonumber(expiryValue)
+        if not expiry then return "Starts on first use" end
+        local remaining = math.max(0, math.floor(expiry - os.time()))
+        local days = math.floor(remaining / 86400)
+        remaining = remaining % 86400
+        local hours = math.floor(remaining / 3600)
+        remaining = remaining % 3600
+        local minutes = math.floor(remaining / 60)
+        local seconds = remaining % 60
+        if days > 0 then
+            return string.format("%dd %02dh %02dm", days, hours, minutes)
+        elseif hours > 0 then
+            return string.format("%dh %02dm %02ds", hours, minutes, seconds)
+        elseif minutes > 0 then
+            return string.format("%dm %02ds", minutes, seconds)
+        end
+        return string.format("%ds", seconds)
+    end
+
+    local function readJunkieRuntime()
+        local runtimeEnv = getgenv()
+        -- Junkie may assign runtime globals a moment after the validator returns.
+        for _ = 1, 20 do
+            if tonumber(runtimeEnv.JD_EXPIRES_AT) then break end
+            task.wait(0.1)
+        end
+        return runtimeEnv
+    end
 
     local function handleRedeem()
         local key = textBox.Text:gsub("%s+", "")
@@ -2502,12 +2815,20 @@ local function BuildKeyUI()
         redeemBtn.Active = true
         if valid then
             saveKey(key) getgenv().SCRIPT_KEY = key getgenv().IsnowLoaded = false
-            setStatus("success") Isnow:Notify("Success", "Key validated successfully!", 2, "success") task.wait(1)
+            local runtimeEnv = readJunkieRuntime()
+            local runtimeIsPremium = runtimeEnv.JD_IS_PREMIUM == true
+            local runtimeTier = runtimeIsPremium and "Premium" or "Standard"
+            local runtimeExpiry = tonumber(runtimeEnv.JD_EXPIRES_AT)
+            local runtimeDuration = formatRuntimeDuration(runtimeExpiry)
+            setStatus("success", runtimeTier .. " Version")
+            Isnow:Notify("Access " .. runtimeTier .. " Key", "Duration remaining - " .. runtimeDuration, 4, "success")
+            task.wait(1)
             closeDoorsThenExit(function()
                 disableBlur()
-                TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
-                TweenService:Create(mainFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-                task.wait(0.4) screenGui:Destroy()
+                fadeGuiTree(container, 0.35)
+                TweenService:Create(container, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
+                task.wait(0.46)
+                if screenGui and screenGui.Parent then screenGui:Destroy() end
                 if not Internal.IsJunkieMode and Isnow.Callbacks.OnSuccess then Isnow.Callbacks.OnSuccess() end
             end)
         else
@@ -2516,6 +2837,27 @@ local function BuildKeyUI()
         end
     end
 
+    local function showAccessControls(mode)
+        selectedAccessMode = mode
+        accessSelector.Visible = false
+        statusLabel.Visible = true
+        statusLabel.Text = mode == "Premium" and "Premium Version" or "Free Version"
+        statusIcon.Image = mode == "Premium" and (getIcon("shield") or getIcon("key")) or (getIcon("key") or getIcon("shield"))
+        statusIcon.ImageColor3 = mode == "Premium" and Isnow.Theme.Accent or Isnow.Theme.StatusIdle
+        textBox.PlaceholderText = mode == "Premium" and "Enter Your Premium Key" or "Enter Your Free Key"
+        inputFrame.Visible = true
+        dividerLine.Visible = true
+        acquireBtn.Visible = true
+        redeemBtn.Visible = true
+    end
+
+    freeAccessBtn.MouseButton1Click:Connect(function()
+        showAccessControls("Free")
+    end)
+
+    premiumAccessBtn.MouseButton1Click:Connect(function()
+        showAccessControls("Premium")
+    end)
     redeemBtn.MouseButton1Click:Connect(handleRedeem)
     acquireBtn.MouseButton1Click:Connect(function()
         if Isnow.Options.NoGetKey then
