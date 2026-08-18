@@ -269,6 +269,35 @@ local Library = {
     Notifications = {},
     NotifySide = "Right",
     NotifyTweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    --// Notification History (built-in) \\--
+    NotificationHistory = {},
+    NotificationHistoryLimit = 100,
+    NotificationHistoryKeybind = Enum.KeyCode.RightAlt,
+    NotificationHistoryFrame = nil,
+    NotificationHistoryContainer = nil,
+    NotificationHistoryOpen = false,
+    NotificationHistoryRestPos = nil,
+    NotificationUnreadCount = 0,
+    NotificationBadge = nil,
+    NotificationBadges = {},
+    NotificationBell = nil,
+    NotificationBellMini = nil,
+    --// Enabled Features (built-in) \\--
+    EnabledFeaturesFrame = nil,
+    EnabledFeaturesContainer = nil,
+    EnabledFeaturesButton = nil,
+    EnabledFeaturesButtonMini = nil,
+    EnabledFeaturesOpen = false,
+    EnabledFeaturesRestPos = nil,
+    EnabledFeaturesBadge = nil,
+    EnabledFeaturesBadges = {},
+    --// Primary-text color per notification type; customizable by the user
+    NotificationTypeColors = {
+        Error = Color3.fromRGB(255, 76, 76),
+        Warning = Color3.fromRGB(255, 176, 32),
+        Success = Color3.fromRGB(96, 216, 118),
+        Info = Color3.fromRGB(96, 165, 255),
+    },
 
     --// Dialogues \\--
     Dialogues = {},
@@ -9913,9 +9942,1210 @@ function Library:Notify(...)
         end
     end)
 
+    --// Record this notification into the built-in history log \--
+    Library:AddNotificationToHistory({
+        Title = Data.Title,
+        Description = Data.Description,
+        TitleColor = Data.TitleColor,
+        DescriptionColor = Data.DescriptionColor,
+        Icon = Data.Icon,
+        IconColor = Data.IconColor,
+        Type = Data.Type,
+    })
     return Data
 end
+--// Notification History \\--
+function Library:AddNotificationToHistory(Entry)
+    if typeof(Entry) ~= "table" then
+        return
+    end
 
+    Entry.Timestamp = Entry.Timestamp or os.time()
+    Entry.TimeString = Entry.TimeString or os.date("%H:%M:%S", Entry.Timestamp)
+
+    table.insert(Library.NotificationHistory, 1, Entry)
+
+    local Limit = tonumber(Library.NotificationHistoryLimit) or 100
+    while #Library.NotificationHistory > Limit do
+        table.remove(Library.NotificationHistory)
+    end
+
+    if Library.NotificationHistoryOpen then
+        Library:RefreshNotificationHistory()
+    else
+        Library.NotificationUnreadCount = (Library.NotificationUnreadCount or 0) + 1
+        Library:UpdateNotificationBadge()
+    end
+end
+
+function Library:UpdateNotificationBadge()
+    local Count = Library.NotificationUnreadCount or 0
+    local Text = Count > 99 and "99+" or tostring(Count)
+
+    --// There can be more than one bell (top bar + minimized card)
+    for _, Badge in Library.NotificationBadges do
+        if Badge.Holder and Badge.Holder.Parent then
+            Badge.Holder.Visible = Count > 0
+            Badge.Label.Text = Text
+        end
+    end
+end
+
+function Library:GetNotificationHistory()
+    return Library.NotificationHistory
+end
+
+function Library:ClearNotificationHistory()
+    table.clear(Library.NotificationHistory)
+    if Library.NotificationHistoryFrame and Library.NotificationHistoryFrame.Visible then
+        Library:RefreshNotificationHistory()
+    end
+end
+
+--// The panel drops down from underneath the notification bell. The draggable
+--// system uses top-left offset coordinates, so we compute an offset for it.
+local NOTIFY_HISTORY_SIZE = Vector2.new(288, 328)
+--// Slides up toward the bell as it fades, so it reads as retracting into it
+local NOTIFY_HISTORY_SLIDE = UDim2.fromOffset(0, -22)
+local NotifyHistoryOpenTween = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local NotifyHistoryCloseTween = TweenInfo.new(0.17, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+
+--// Computes a top-left offset that drops a panel of the given size out from
+--// underneath a top-bar button, right-aligned to it and clamped on-screen.
+local function GetDropPanelPos(Button, Size)
+    local Camera = workspace.CurrentCamera
+    local Viewport = (Camera and Camera.ViewportSize) or Vector2.new(1280, 720)
+    local MaxX = math.max(6, Viewport.X - Size.X - 6)
+    local MaxY = math.max(6, Viewport.Y - Size.Y - 6)
+
+    if Button and Button.Parent then
+        local ButtonPos, ButtonSize = Button.AbsolutePosition, Button.AbsoluteSize
+        local X = (ButtonPos.X + ButtonSize.X) - Size.X
+        local Y = ButtonPos.Y + ButtonSize.Y + 10
+        return UDim2.fromOffset(math.clamp(X, 6, MaxX), math.clamp(Y, 6, MaxY))
+    end
+
+    --// Fallback before a window exists: top-right corner
+    return UDim2.fromOffset(MaxX, 56)
+end
+
+--// True only if a GuiObject and all its ancestors are visible (so a hidden
+--// window's buttons are not treated as on-screen)
+local function IsGuiEffectivelyVisible(Gui)
+    local Current = Gui
+    while Current and Current:IsA("GuiObject") do
+        if not Current.Visible then
+            return false
+        end
+        Current = Current.Parent
+    end
+    return true
+end
+
+--// Prefer the minimized-card button when it is the one on screen
+local function PickVisibleButton(Main, Mini)
+    if Mini and IsGuiEffectivelyVisible(Mini) then
+        return Mini
+    end
+    return Main
+end
+
+local function GetNotifyHistoryDefaultPos()
+    return GetDropPanelPos(PickVisibleButton(Library.NotificationBell, Library.NotificationBellMini), NOTIFY_HISTORY_SIZE)
+end
+
+function Library:_BuildNotificationHistory()
+    if Library.NotificationHistoryFrame then
+        return
+    end
+
+    local Holder = New("CanvasGroup", {
+        AnchorPoint = Vector2.new(0, 0),
+        BackgroundColor3 = "BackgroundColor",
+        Position = GetNotifyHistoryDefaultPos(),
+        Size = UDim2.fromOffset(NOTIFY_HISTORY_SIZE.X, NOTIFY_HISTORY_SIZE.Y),
+        GroupTransparency = 1,
+        Visible = false,
+        ZIndex = 10,
+        Parent = ScreenGui,
+    })
+    table.insert(
+        Library.Corners,
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Holder,
+        })
+    )
+    table.insert(
+        Library.Scales,
+        New("UIScale", {
+            Parent = Holder,
+        })
+    )
+    Library:AddOutline(Holder)
+
+    local TitleLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 34),
+        Text = "Notification History",
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Holder,
+    })
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 12),
+        PaddingRight = UDim.new(0, 36),
+        Parent = TitleLabel,
+    })
+
+    Library:MakeLine(Holder, {
+        Position = UDim2.fromOffset(0, 34),
+        Size = UDim2.new(1, 0, 0, 1),
+    })
+
+    --// Close (X) button in the title bar
+    local CloseIcon = Library:GetIcon("x")
+    local CloseButton = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -8, 0, 17),
+        Size = UDim2.fromOffset(20, 20),
+        Text = CloseIcon and "" or "X",
+        TextColor3 = "FontColor",
+        TextSize = 14,
+        TextTransparency = 0.35,
+        ZIndex = 11,
+        Parent = Holder,
+    })
+    local CloseImage
+    if CloseIcon then
+        CloseImage = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            Image = CloseIcon.Url,
+            ImageColor3 = "FontColor",
+            ImageRectOffset = CloseIcon.ImageRectOffset,
+            ImageRectSize = CloseIcon.ImageRectSize,
+            ImageTransparency = 0.35,
+            Position = UDim2.fromScale(0.5, 0.5),
+            ScaleType = Enum.ScaleType.Fit,
+            Size = UDim2.fromOffset(14, 14),
+            ZIndex = 12,
+            Parent = CloseButton,
+        })
+    end
+    CloseButton.MouseEnter:Connect(function()
+        TweenService:Create(CloseButton, Library.TweenInfo, { TextTransparency = 0 }):Play()
+        if CloseImage then
+            TweenService:Create(CloseImage, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+        end
+    end)
+    CloseButton.MouseLeave:Connect(function()
+        TweenService:Create(CloseButton, Library.TweenInfo, { TextTransparency = 0.35 }):Play()
+        if CloseImage then
+            TweenService:Create(CloseImage, Library.TweenInfo, { ImageTransparency = 0.35 }):Play()
+        end
+    end)
+    CloseButton.MouseButton1Click:Connect(function()
+        Library:SetNotificationHistoryVisible(false)
+    end)
+
+    local Scroller = New("ScrollingFrame", {
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.fromScale(0, 0),
+        Position = UDim2.fromOffset(0, 35),
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = "AccentColor",
+        Size = UDim2.new(1, 0, 1, -35),
+        Parent = Holder,
+    })
+    New("UIListLayout", {
+        Padding = UDim.new(0, 6),
+        Parent = Scroller,
+    })
+    New("UIPadding", {
+        PaddingBottom = UDim.new(0, 8),
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+        PaddingTop = UDim.new(0, 8),
+        Parent = Scroller,
+    })
+
+    Library:MakeDraggable(Holder, TitleLabel, true)
+    if not table.find(Library.DraggableElements, Holder) then
+        table.insert(Library.DraggableElements, Holder)
+    end
+
+    --// Clicking anywhere outside the panel (and not on the bell) closes it
+    Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObject)
+        if Library.Unloaded or not Library.NotificationHistoryOpen then
+            return
+        end
+        if not IsClickInput(Input, true) then
+            return
+        end
+
+        local Location = Input.Position
+        if Library:MouseIsOverFrame(Holder, Location) then
+            return
+        end
+        if Library.NotificationBell and Library:MouseIsOverFrame(Library.NotificationBell, Location) then
+            return
+        end
+        if Library.NotificationBellMini and Library:MouseIsOverFrame(Library.NotificationBellMini, Location) then
+            return
+        end
+
+        Library:SetNotificationHistoryVisible(false)
+    end))
+
+    Library.NotificationHistoryFrame = Holder
+    Library.NotificationHistoryContainer = Scroller
+    Library.NotificationHistoryRestPos = Holder.Position
+end
+
+function Library:RefreshNotificationHistory()
+    Library:_BuildNotificationHistory()
+
+    local Scroller = Library.NotificationHistoryContainer
+    for _, Child in Scroller:GetChildren() do
+        if not (Child:IsA("UIListLayout") or Child:IsA("UIPadding")) then
+            Child:Destroy()
+        end
+    end
+
+    if #Library.NotificationHistory == 0 then
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 24),
+            Text = "No notifications yet.",
+            TextColor3 = "FontColor",
+            TextTransparency = 0.4,
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Scroller,
+        })
+        return
+    end
+
+    --// "copy" is the two-page copy/paste glyph; success swaps to a checkmark
+    local ClipboardIcon = Library:GetIcon("copy")
+    local ClipboardCheckIcon = Library:GetIcon("clipboard-check") or Library:GetIcon("check")
+    local SuccessColor = Library.NotificationTypeColors.Success or Color3.fromRGB(96, 216, 118)
+    local Clipboard = (setclipboard or (typeof(toclipboard) == "function" and toclipboard) or (typeof(writeclipboard) == "function" and writeclipboard))
+
+    for _, Entry in Library.NotificationHistory do
+        local Card = New("TextButton", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            AutoButtonColor = false,
+            BackgroundColor3 = "MainColor",
+            Size = UDim2.new(1, 0, 0, 0),
+            Text = "",
+            Parent = Scroller,
+        })
+        --// Not registered in Library.Corners: cards are rebuilt on every refresh,
+        --// so they simply adopt the current radius instead of leaking references
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Card,
+        })
+        Library:AddOutline(Card)
+
+        --// Inner content holds the list; the copy icon overlays outside of it
+        local Content = New("Frame", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 0),
+            Parent = Card,
+        })
+        New("UIListLayout", {
+            Padding = UDim.new(0, 2),
+            Parent = Content,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 24),
+            PaddingTop = UDim.new(0, 6),
+            Parent = Content,
+        })
+
+        local CopyImage
+        if ClipboardIcon then
+            CopyImage = New("ImageLabel", {
+                AnchorPoint = Vector2.new(1, 0),
+                BackgroundTransparency = 1,
+                Image = ClipboardIcon.Url,
+                ImageColor3 = "FontColor",
+                ImageRectOffset = ClipboardIcon.ImageRectOffset,
+                ImageRectSize = ClipboardIcon.ImageRectSize,
+                ImageTransparency = 0.55,
+                Position = UDim2.new(1, -7, 0, 7),
+                Size = UDim2.fromOffset(13, 13),
+                ZIndex = 6,
+                Parent = Card,
+            })
+        end
+
+        --// "Copied!" feedback, hidden until a copy happens
+        local CopiedLabel = New("TextLabel", {
+            AnchorPoint = Vector2.new(1, 0),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(1, -24, 0, 5),
+            Size = UDim2.fromOffset(50, 14),
+            Text = "Copied!",
+            TextColor3 = SuccessColor,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            TextTransparency = 1,
+            ZIndex = 6,
+            Parent = Card,
+        })
+
+        Library:AddTooltip("Click to copy", nil, Card)
+        Card.MouseEnter:Connect(function()
+            if CopyImage then
+                TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.1 }):Play()
+            end
+        end)
+        Card.MouseLeave:Connect(function()
+            if CopyImage then
+                TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.55 }):Play()
+            end
+        end)
+        Card.MouseButton1Click:Connect(function()
+            local Parts = {}
+            if Entry.TimeString then
+                table.insert(Parts, string.format("[%s]", tostring(Entry.TimeString)))
+            end
+            if Entry.Title and Entry.Title ~= "nil" then
+                table.insert(Parts, tostring(Entry.Title))
+            end
+            if Entry.Description and Entry.Description ~= "nil" then
+                table.insert(Parts, tostring(Entry.Description))
+            end
+            local Text = table.concat(Parts, "\n")
+
+            local Ok = Clipboard ~= nil
+            if Ok then
+                Ok = pcall(Clipboard, Text)
+            end
+
+            --// Icon swaps to a checkmark and pops in with a little bounce
+            if CopyImage then
+                if Ok and ClipboardCheckIcon then
+                    CopyImage.Image = ClipboardCheckIcon.Url
+                    CopyImage.ImageRectOffset = ClipboardCheckIcon.ImageRectOffset
+                    CopyImage.ImageRectSize = ClipboardCheckIcon.ImageRectSize
+                end
+                CopyImage.ImageColor3 = Ok and SuccessColor or (Library.NotificationTypeColors.Error or Color3.fromRGB(255, 76, 76))
+                CopyImage.ImageTransparency = 0
+
+                CopyImage.Size = UDim2.fromOffset(9, 9)
+                TweenService:Create(CopyImage, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    Size = UDim2.fromOffset(13, 13),
+                }):Play()
+            end
+
+            --// "Copied!" tag rises up while fading in then out
+            CopiedLabel.Text = Ok and "Copied!" or "No clipboard"
+            CopiedLabel.TextColor3 = Ok and SuccessColor or (Library.NotificationTypeColors.Error or Color3.fromRGB(255, 76, 76))
+            CopiedLabel.TextTransparency = 0
+            CopiedLabel.Position = UDim2.new(1, -24, 0, 9)
+            TweenService:Create(CopiedLabel, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Position = UDim2.new(1, -24, 0, 5),
+            }):Play()
+            TweenService:Create(CopiedLabel, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                TextTransparency = 1,
+            }):Play()
+
+            task.delay(0.9, function()
+                if CopyImage and CopyImage.Parent then
+                    if ClipboardIcon then
+                        CopyImage.Image = ClipboardIcon.Url
+                        CopyImage.ImageRectOffset = ClipboardIcon.ImageRectOffset
+                        CopyImage.ImageRectSize = ClipboardIcon.ImageRectSize
+                    end
+                    CopyImage.ImageColor3 = Library.Scheme.FontColor
+                    TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.55 }):Play()
+                end
+            end)
+        end)
+
+        local Header = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 14),
+            Parent = Content,
+        })
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, 6),
+            Parent = Header,
+        })
+        New("TextLabel", {
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(0, 0, 1, 0),
+            Text = string.format("[%s]", tostring(Entry.TimeString or "")),
+            TextColor3 = "AccentColor",
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Header,
+        })
+        if Entry.Type then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 0, 1, 0),
+                Text = string.upper(tostring(Entry.Type)),
+                TextColor3 = Library.NotificationTypeColors[Entry.Type] or "FontColor",
+                TextSize = 12,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Header,
+            })
+        end
+
+        if Entry.Title and Entry.Title ~= "nil" then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Text = tostring(Entry.Title),
+                TextColor3 = Entry.TitleColor or "FontColor",
+                TextSize = 15,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Content,
+            })
+        end
+
+        if Entry.Description and Entry.Description ~= "nil" then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Text = tostring(Entry.Description),
+                TextColor3 = Entry.DescriptionColor or "FontColor",
+                TextSize = 14,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Content,
+            })
+        end
+    end
+end
+
+function Library:SetNotificationHistoryVisible(Visible: boolean)
+    Library:_BuildNotificationHistory()
+
+    local Frame = Library.NotificationHistoryFrame
+    Visible = Visible and true or false
+
+    if Library.NotificationHistoryOpen == Visible then
+        return
+    end
+    Library.NotificationHistoryOpen = Visible
+
+    Library._NotifHistoryAnim = (Library._NotifHistoryAnim or 0) + 1
+    local AnimId = Library._NotifHistoryAnim
+
+    if Visible then
+        Library:RefreshNotificationHistory()
+        --// Opening the panel marks everything as read
+        Library.NotificationUnreadCount = 0
+        Library:UpdateNotificationBadge()
+
+        --// Always drop out from under the bell
+        local RestPos = GetNotifyHistoryDefaultPos()
+        Library.NotificationHistoryRestPos = RestPos
+        Frame.Position = RestPos + NOTIFY_HISTORY_SLIDE
+        Frame.GroupTransparency = 1
+        Frame.Visible = true
+
+        TweenService:Create(Frame, NotifyHistoryOpenTween, {
+            Position = RestPos,
+            GroupTransparency = 0,
+        }):Play()
+    else
+        --// Retract up toward the bell from wherever it currently sits
+        local RestPos = Frame.Position
+
+        TweenService:Create(Frame, NotifyHistoryCloseTween, {
+            Position = RestPos + NOTIFY_HISTORY_SLIDE,
+            GroupTransparency = 1,
+        }):Play()
+
+        task.delay(NotifyHistoryCloseTween.Time, function()
+            if Library._NotifHistoryAnim == AnimId and not Library.NotificationHistoryOpen and Frame and Frame.Parent then
+                Frame.Visible = false
+            end
+        end)
+    end
+end
+
+function Library:ToggleNotificationHistory()
+    Library:_BuildNotificationHistory()
+    Library:SetNotificationHistoryVisible(not Library.NotificationHistoryOpen)
+end
+
+--// Enabled Features \\--
+local ENABLED_FEATURES_SIZE = Vector2.new(300, 340)
+
+local function GetEnabledFeaturesDefaultPos()
+    return GetDropPanelPos(PickVisibleButton(Library.EnabledFeaturesButton, Library.EnabledFeaturesButtonMini), ENABLED_FEATURES_SIZE)
+end
+
+function Library:_BuildEnabledFeatures()
+    if Library.EnabledFeaturesFrame then
+        return
+    end
+
+    local Holder = New("CanvasGroup", {
+        AnchorPoint = Vector2.new(0, 0),
+        BackgroundColor3 = "BackgroundColor",
+        Position = GetEnabledFeaturesDefaultPos(),
+        Size = UDim2.fromOffset(ENABLED_FEATURES_SIZE.X, ENABLED_FEATURES_SIZE.Y),
+        GroupTransparency = 1,
+        Visible = false,
+        ZIndex = 10,
+        Parent = ScreenGui,
+    })
+    table.insert(
+        Library.Corners,
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Holder,
+        })
+    )
+    table.insert(
+        Library.Scales,
+        New("UIScale", {
+            Parent = Holder,
+        })
+    )
+    Library:AddOutline(Holder)
+
+    local TitleLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 34),
+        Text = "Enabled Features",
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Holder,
+    })
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 12),
+        PaddingRight = UDim.new(0, 36),
+        Parent = TitleLabel,
+    })
+
+    Library:MakeLine(Holder, {
+        Position = UDim2.fromOffset(0, 34),
+        Size = UDim2.new(1, 0, 0, 1),
+    })
+
+    local CloseIcon = Library:GetIcon("x")
+    local CloseButton = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -8, 0, 17),
+        Size = UDim2.fromOffset(20, 20),
+        Text = CloseIcon and "" or "X",
+        TextColor3 = "FontColor",
+        TextSize = 14,
+        TextTransparency = 0.35,
+        ZIndex = 11,
+        Parent = Holder,
+    })
+    local CloseImage
+    if CloseIcon then
+        CloseImage = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            Image = CloseIcon.Url,
+            ImageColor3 = "FontColor",
+            ImageRectOffset = CloseIcon.ImageRectOffset,
+            ImageRectSize = CloseIcon.ImageRectSize,
+            ImageTransparency = 0.35,
+            Position = UDim2.fromScale(0.5, 0.5),
+            ScaleType = Enum.ScaleType.Fit,
+            Size = UDim2.fromOffset(14, 14),
+            ZIndex = 12,
+            Parent = CloseButton,
+        })
+    end
+    CloseButton.MouseEnter:Connect(function()
+        TweenService:Create(CloseButton, Library.TweenInfo, { TextTransparency = 0 }):Play()
+        if CloseImage then
+            TweenService:Create(CloseImage, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+        end
+    end)
+    CloseButton.MouseLeave:Connect(function()
+        TweenService:Create(CloseButton, Library.TweenInfo, { TextTransparency = 0.35 }):Play()
+        if CloseImage then
+            TweenService:Create(CloseImage, Library.TweenInfo, { ImageTransparency = 0.35 }):Play()
+        end
+    end)
+    CloseButton.MouseButton1Click:Connect(function()
+        Library:SetEnabledFeaturesVisible(false)
+    end)
+
+    local Scroller = New("ScrollingFrame", {
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.fromScale(0, 0),
+        Position = UDim2.fromOffset(0, 35),
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = "AccentColor",
+        Size = UDim2.new(1, 0, 1, -35),
+        Parent = Holder,
+    })
+    New("UIListLayout", {
+        Padding = UDim.new(0, 6),
+        Parent = Scroller,
+    })
+    New("UIPadding", {
+        PaddingBottom = UDim.new(0, 8),
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+        PaddingTop = UDim.new(0, 8),
+        Parent = Scroller,
+    })
+
+    Library:MakeDraggable(Holder, TitleLabel, true)
+    if not table.find(Library.DraggableElements, Holder) then
+        table.insert(Library.DraggableElements, Holder)
+    end
+
+    Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObject)
+        if Library.Unloaded or not Library.EnabledFeaturesOpen then
+            return
+        end
+        if not IsClickInput(Input, true) then
+            return
+        end
+
+        local Location = Input.Position
+        if Library:MouseIsOverFrame(Holder, Location) then
+            return
+        end
+        if Library.EnabledFeaturesButton and Library:MouseIsOverFrame(Library.EnabledFeaturesButton, Location) then
+            return
+        end
+        if Library.EnabledFeaturesButtonMini and Library:MouseIsOverFrame(Library.EnabledFeaturesButtonMini, Location) then
+            return
+        end
+
+        Library:SetEnabledFeaturesVisible(false)
+    end))
+
+    Library.EnabledFeaturesFrame = Holder
+    Library.EnabledFeaturesContainer = Scroller
+    Library.EnabledFeaturesRestPos = Holder.Position
+end
+
+--// True if two option values differ (handles multi-dropdown tables)
+local function FeatureValuesEqual(A, B)
+    if type(A) == "table" and type(B) == "table" then
+        for K, V in A do
+            if B[K] ~= V then
+                return false
+            end
+        end
+        for K, V in B do
+            if A[K] ~= V then
+                return false
+            end
+        end
+        return true
+    end
+    return A == B
+end
+
+--// A dropdown stores its default as an array of indices into Values; resolve
+--// that back into the same shape as Dropdown.Value (a value, or a {[val]=true} map)
+local function DropdownDefaultValue(Dropdown)
+    local Indices = Dropdown.Default
+    if Dropdown.Multi then
+        local Map = {}
+        if type(Indices) == "table" then
+            for _, Index in Indices do
+                local Value = Dropdown.Values and Dropdown.Values[Index]
+                if Value ~= nil then
+                    Map[Value] = true
+                end
+            end
+        end
+        return Map
+    else
+        if type(Indices) == "table" and Indices[1] then
+            return Dropdown.Values and Dropdown.Values[Indices[1]] or nil
+        end
+        return nil
+    end
+end
+
+--// Whether an element's current value has been changed from its default
+local function FeatureIsAltered(Element)
+    if Element.Type == "Dropdown" then
+        local Default = DropdownDefaultValue(Element)
+        if Element.Multi then
+            return not FeatureValuesEqual(Element.Value or {}, Default)
+        end
+        return Element.Value ~= Default
+    end
+
+    if Element.Default == nil then
+        return false
+    end
+    return Element.Value ~= Element.Default
+end
+function Library:UpdateEnabledFeaturesBadge()
+    local Count = 0
+    for _, Toggle in Library.Toggles do
+        if typeof(Toggle) == "table" and Toggle.Type == "Toggle" and not Toggle.Disabled and FeatureIsAltered(Toggle) then
+            Count += 1
+        end
+    end
+    for _, Option in Library.Options do
+        if typeof(Option) == "table" and not Option.Disabled then
+            local T = Option.Type
+            if (T == "Slider" or T == "Input" or T == "Dropdown") and FeatureIsAltered(Option) then
+                Count += 1
+            end
+        end
+    end
+    local Text = Count > 99 and "99+" or tostring(Count)
+    for _, Badge in Library.EnabledFeaturesBadges do
+        if Badge.Holder and Badge.Holder.Parent then
+            Badge.Holder.Visible = Count > 0
+            Badge.Label.Text = Text
+        end
+    end
+end
+
+--// A small "reset to default" button; resets then rebuilds the list so the
+--// now-unaltered element drops out
+local function BuildFeatureReset(Parent, Element)
+    local Icon = Library:GetIcon("rotate-ccw")
+    local Button = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, 0, 0.5, 0),
+        Size = UDim2.fromOffset(18, 18),
+        Text = Icon and "" or "↺",
+        TextColor3 = "FontColor",
+        TextSize = 13,
+        TextTransparency = 0.4,
+        Parent = Parent,
+    })
+    local Image
+    if Icon then
+        Image = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            Image = Icon.Url,
+            ImageColor3 = "FontColor",
+            ImageRectOffset = Icon.ImageRectOffset,
+            ImageRectSize = Icon.ImageRectSize,
+            ImageTransparency = 0.4,
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(13, 13),
+            Parent = Button,
+        })
+    end
+    Library:AddTooltip("Reset to default", nil, Button)
+    Button.MouseEnter:Connect(function()
+        TweenService:Create(Button, Library.TweenInfo, { TextTransparency = 0 }):Play()
+        if Image then
+            TweenService:Create(Image, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+        end
+    end)
+    Button.MouseLeave:Connect(function()
+        TweenService:Create(Button, Library.TweenInfo, { TextTransparency = 0.4 }):Play()
+        if Image then
+            TweenService:Create(Image, Library.TweenInfo, { ImageTransparency = 0.4 }):Play()
+        end
+    end)
+    Button.MouseButton1Click:Connect(function()
+        local DefaultValue = Element.Default
+        if Element.Type == "Dropdown" then
+            DefaultValue = DropdownDefaultValue(Element)
+        end
+        pcall(function()
+            Element:SetValue(DefaultValue)
+        end)
+        Library:RefreshEnabledFeatures()
+    end)
+    return Button
+end
+
+--// A compact on/off switch that mirrors a toggle's live state
+local function BuildFeatureSwitch(Parent, Toggle)
+    local Switch = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundColor3 = "BackgroundColor",
+        Position = UDim2.new(1, 0, 0.5, 0),
+        Size = UDim2.fromOffset(34, 18),
+        Text = "",
+        Parent = Parent,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = Switch,
+    })
+    New("UIStroke", {
+        Color = "OutlineColor",
+        Parent = Switch,
+    })
+    local Ball = New("Frame", {
+        AnchorPoint = Vector2.new(0, 0.5),
+        BackgroundColor3 = "FontColor",
+        Position = UDim2.new(0, 3, 0.5, 0),
+        Size = UDim2.fromOffset(12, 12),
+        Parent = Switch,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = Ball,
+    })
+
+    local function Sync(Animated)
+        local On = Toggle.Value and true or false
+        local BallPos = On and UDim2.new(1, -15, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
+        local BgColor = On and Library.Scheme.AccentColor or Library.Scheme.BackgroundColor
+
+        if Animated then
+            TweenService:Create(Ball, Library.TweenInfo, { Position = BallPos }):Play()
+            TweenService:Create(Switch, Library.TweenInfo, { BackgroundColor3 = BgColor }):Play()
+        else
+            Ball.Position = BallPos
+            Switch.BackgroundColor3 = BgColor
+        end
+    end
+
+    Switch.MouseButton1Click:Connect(function()
+        if Toggle.Disabled then
+            return
+        end
+        Toggle:SetValue(not Toggle.Value)
+        Sync(true)
+    end)
+
+    Sync(false)
+    return Switch
+end
+
+--// A compact draggable slider bound to a Slider option
+local function BuildFeatureSlider(Parent, Slider)
+    local Bar = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundColor3 = "BackgroundColor",
+        Position = UDim2.new(1, -24, 0.5, 0),
+        Size = UDim2.fromOffset(116, 16),
+        Text = "",
+        Parent = Parent,
+    })
+    New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Bar })
+    New("UIStroke", { Color = "OutlineColor", Parent = Bar })
+    local Fill = New("Frame", {
+        BackgroundColor3 = "AccentColor",
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 0, 1, 0),
+        Parent = Bar,
+    })
+    New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Fill })
+    local ValueLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 1),
+        Text = "",
+        TextColor3 = "FontColor",
+        TextSize = 12,
+        ZIndex = 2,
+        Parent = Bar,
+    })
+
+    local function Update()
+        local Range = Slider.Max - Slider.Min
+        local Alpha = Range > 0 and (Slider.Value - Slider.Min) / Range or 0
+        Fill.Size = UDim2.new(math.clamp(Alpha, 0, 1), 0, 1, 0)
+        ValueLabel.Text = string.format("%s%s%s", tostring(Slider.Prefix or ""), tostring(Slider.Value), tostring(Slider.Suffix or ""))
+    end
+
+    local function SetFromX(PX)
+        local Rel = (PX - Bar.AbsolutePosition.X) / math.max(1, Bar.AbsoluteSize.X)
+        local Alpha = math.clamp(Rel, 0, 1)
+        local Raw = Slider.Min + Alpha * (Slider.Max - Slider.Min)
+        local Factor = 10 ^ (Slider.Rounding or 0)
+        Slider:SetValue(math.floor(Raw * Factor + 0.5) / Factor)
+        Update()
+    end
+
+    local MoveConn, EndConn
+    Bar.InputBegan:Connect(function(Input: InputObject)
+        if Slider.Disabled then
+            return
+        end
+        if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.Touch then
+            return
+        end
+
+        SetFromX(Input.Position.X)
+        MoveConn = UserInputService.InputChanged:Connect(function(Move: InputObject)
+            if Move.UserInputType == Enum.UserInputType.MouseMovement or Move.UserInputType == Enum.UserInputType.Touch then
+                SetFromX(Move.Position.X)
+            end
+        end)
+        EndConn = UserInputService.InputEnded:Connect(function(Ended: InputObject)
+            if Ended.UserInputType == Enum.UserInputType.MouseButton1 or Ended.UserInputType == Enum.UserInputType.Touch then
+                if MoveConn then MoveConn:Disconnect() MoveConn = nil end
+                if EndConn then EndConn:Disconnect() EndConn = nil end
+            end
+        end)
+    end)
+
+    Update()
+    return Bar
+end
+
+--// A text box bound to an Input option
+local function BuildFeatureInput(Parent, Input)
+    local Box = New("TextBox", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundColor3 = "BackgroundColor",
+        ClearTextOnFocus = false,
+        Position = UDim2.new(1, -24, 0.5, 0),
+        Size = UDim2.fromOffset(116, 20),
+        Text = tostring(Input.Value or ""),
+        TextColor3 = "FontColor",
+        TextSize = 13,
+        TextEditable = not Input.Disabled,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Parent,
+    })
+    New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Box })
+    New("UIStroke", { Color = "OutlineColor", Parent = Box })
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 6),
+        PaddingRight = UDim.new(0, 6),
+        Parent = Box,
+    })
+    Box.FocusLost:Connect(function()
+        pcall(function()
+            Input:SetValue(Box.Text)
+        end)
+        Box.Text = tostring(Input.Value or "")
+    end)
+    return Box
+end
+
+--// A dropdown value display; single-select cycles on click, multi shows a summary
+local function BuildFeatureDropdown(Parent, Dropdown)
+    local Button = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundColor3 = "BackgroundColor",
+        Position = UDim2.new(1, -24, 0.5, 0),
+        Size = UDim2.fromOffset(116, 20),
+        Text = "",
+        Parent = Parent,
+    })
+    New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Button })
+    New("UIStroke", { Color = "OutlineColor", Parent = Button })
+    local Label = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -12, 1, 0),
+        Position = UDim2.fromOffset(6, 0),
+        Text = "",
+        TextColor3 = "FontColor",
+        TextSize = 13,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Button,
+    })
+
+    local function Display()
+        if Dropdown.Multi then
+            local Parts = {}
+            if type(Dropdown.Value) == "table" then
+                for Val, On in Dropdown.Value do
+                    if On then
+                        table.insert(Parts, tostring(Val))
+                    end
+                end
+            end
+            Label.Text = #Parts > 0 and table.concat(Parts, ", ") or "None"
+        else
+            Label.Text = tostring(Dropdown.Value or "None")
+        end
+    end
+
+    if not Dropdown.Multi then
+        Library:AddTooltip("Click to cycle", nil, Button)
+        Button.MouseButton1Click:Connect(function()
+            local Values = Dropdown.Values
+            if not Values or #Values == 0 then
+                return
+            end
+            local Idx = (Dropdown.Value ~= nil and table.find(Values, Dropdown.Value)) or 0
+            for Step = 1, #Values do
+                local Candidate = Values[((Idx - 1 + Step) % #Values) + 1]
+                local IsDisabled = Dropdown.DisabledValues and table.find(Dropdown.DisabledValues, Candidate)
+                if not IsDisabled then
+                    Dropdown:SetValue(Candidate)
+                    break
+                end
+            end
+            Display()
+        end)
+    end
+
+    Display()
+    return Button
+end
+
+function Library:RefreshEnabledFeatures()
+    Library:_BuildEnabledFeatures()
+    Library:UpdateEnabledFeaturesBadge()
+
+    local Scroller = Library.EnabledFeaturesContainer
+    for _, Child in Scroller:GetChildren() do
+        if not (Child:IsA("UIListLayout") or Child:IsA("UIPadding")) then
+            Child:Destroy()
+        end
+    end
+
+    --// Gather every element whose value differs from its default
+    local Items = {}
+    for _, Toggle in Library.Toggles do
+        if typeof(Toggle) == "table" and Toggle.Type == "Toggle" and not Toggle.Disabled and FeatureIsAltered(Toggle) then
+            table.insert(Items, Toggle)
+        end
+    end
+    for _, Option in Library.Options do
+        if typeof(Option) == "table" and not Option.Disabled then
+            local T = Option.Type
+            if (T == "Slider" or T == "Input" or T == "Dropdown") and FeatureIsAltered(Option) then
+                table.insert(Items, Option)
+            end
+        end
+    end
+    table.sort(Items, function(A, B)
+        return tostring(A.Text or ""):lower() < tostring(B.Text or ""):lower()
+    end)
+
+    if #Items == 0 then
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 24),
+            Text = "No features changed from default.",
+            TextColor3 = "FontColor",
+            TextTransparency = 0.4,
+            TextSize = 14,
+            TextWrapped = true,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Scroller,
+        })
+        return
+    end
+
+    for _, Element in Items do
+        local Row = New("Frame", {
+            BackgroundColor3 = "MainColor",
+            Size = UDim2.new(1, 0, 0, 34),
+            Parent = Scroller,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Row,
+        })
+        Library:AddOutline(Row)
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 10),
+            PaddingRight = UDim.new(0, 10),
+            Parent = Row,
+        })
+
+        local IsToggle = Element.Type == "Toggle"
+        New("TextLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 0, 0.5, 0),
+            Size = UDim2.new(1, IsToggle and -44 or -150, 1, 0),
+            Text = tostring(Element.Text or "Feature"),
+            TextColor3 = "FontColor",
+            TextSize = 14,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Row,
+        })
+
+        if Element.Type == "Toggle" then
+            BuildFeatureSwitch(Row, Element)
+        elseif Element.Type == "Slider" then
+            BuildFeatureSlider(Row, Element)
+            BuildFeatureReset(Row, Element)
+        elseif Element.Type == "Input" then
+            BuildFeatureInput(Row, Element)
+            BuildFeatureReset(Row, Element)
+        elseif Element.Type == "Dropdown" then
+            BuildFeatureDropdown(Row, Element)
+            BuildFeatureReset(Row, Element)
+        end
+    end
+end
+
+function Library:SetEnabledFeaturesVisible(Visible: boolean)
+    Library:_BuildEnabledFeatures()
+
+    local Frame = Library.EnabledFeaturesFrame
+    Visible = Visible and true or false
+
+    if Library.EnabledFeaturesOpen == Visible then
+        return
+    end
+    Library.EnabledFeaturesOpen = Visible
+
+    Library._EFAnim = (Library._EFAnim or 0) + 1
+    local AnimId = Library._EFAnim
+
+    if Visible then
+        Library:RefreshEnabledFeatures()
+
+        local RestPos = GetEnabledFeaturesDefaultPos()
+        Library.EnabledFeaturesRestPos = RestPos
+        Frame.Position = RestPos + NOTIFY_HISTORY_SLIDE
+        Frame.GroupTransparency = 1
+        Frame.Visible = true
+
+        TweenService:Create(Frame, NotifyHistoryOpenTween, {
+            Position = RestPos,
+            GroupTransparency = 0,
+        }):Play()
+    else
+        local RestPos = Frame.Position
+
+        TweenService:Create(Frame, NotifyHistoryCloseTween, {
+            Position = RestPos + NOTIFY_HISTORY_SLIDE,
+            GroupTransparency = 1,
+        }):Play()
+
+        task.delay(NotifyHistoryCloseTween.Time, function()
+            if Library._EFAnim == AnimId and not Library.EnabledFeaturesOpen and Frame and Frame.Parent then
+                Frame.Visible = false
+            end
+        end)
+    end
+end
+
+function Library:ToggleEnabledFeatures()
+    Library:_BuildEnabledFeatures()
+    Library:SetEnabledFeaturesVisible(not Library.EnabledFeaturesOpen)
+end
 function Library:CreateWindow(WindowInfo)
     WindowInfo = Library:Validate(WindowInfo, Templates.Window)
 
@@ -9958,7 +11188,7 @@ function Library:CreateWindow(WindowInfo)
         WindowInfo.Font = Font.fromEnum(WindowInfo.Font :: any)
     end
     WindowInfo.CornerRadius = math.min(WindowInfo.CornerRadius, 20)
-    
+
     --// Old Naming \\--
     if WindowInfo.Compact ~= nil then
         WindowInfo.SidebarCompacted = WindowInfo.Compact
@@ -10024,7 +11254,7 @@ function Library:CreateWindow(WindowInfo)
     local ApplyWindowVisibility
     --// Extra room reserved at the right of the top bar for the minimize button,
     --// which sits beside the move icon rather than in the search row
-    local RightBarInset = WindowInfo.Minimizable and 28 or 0
+    local RightBarInset = (WindowInfo.Minimizable and 28 or 0) + 60
 
     do
         Library.KeybindFrame, Library.KeybindContainer = Library:AddDraggableMenu("Keybinds")
@@ -10553,9 +11783,107 @@ function Library:CreateWindow(WindowInfo)
             })
 
             local RestoreIcon = Library:GetIcon("chevron-up")
+            local function MiniActionButton(Icon, LayoutOrder, TooltipText, OnClick, Fallback)
+                local Btn = New("TextButton", {
+                    BackgroundTransparency = 1,
+                    LayoutOrder = LayoutOrder,
+                    Size = UDim2.fromOffset(22, 22),
+                    Text = Icon and "" or Fallback,
+                    TextColor3 = "FontColor",
+                    TextSize = 15,
+                    TextTransparency = 0.35,
+                    Parent = MiniHeader,
+                })
+                local Img
+                if Icon then
+                    Img = New("ImageLabel", {
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundTransparency = 1,
+                        Image = Icon.Url,
+                        ImageColor3 = "FontColor",
+                        ImageRectOffset = Icon.ImageRectOffset,
+                        ImageRectSize = Icon.ImageRectSize,
+                        ImageTransparency = 0.35,
+                        Position = UDim2.fromScale(0.5, 0.5),
+                        ScaleType = Enum.ScaleType.Fit,
+                        Size = UDim2.fromOffset(16, 16),
+                        Parent = Btn,
+                    })
+                end
+                Btn.MouseEnter:Connect(function()
+                    TweenService:Create(Btn, Library.TweenInfo, { TextTransparency = 0 }):Play()
+                    if Img then TweenService:Create(Img, Library.TweenInfo, { ImageTransparency = 0 }):Play() end
+                end)
+                Btn.MouseLeave:Connect(function()
+                    TweenService:Create(Btn, Library.TweenInfo, { TextTransparency = 0.35 }):Play()
+                    if Img then TweenService:Create(Img, Library.TweenInfo, { ImageTransparency = 0.35 }):Play() end
+                end)
+                Library:AddTooltip(TooltipText, nil, Btn)
+                Btn.MouseButton1Click:Connect(OnClick)
+                return Btn
+            end
+            local MiniFeatures = MiniActionButton(
+                Library:GetIcon("sliders-horizontal") or Library:GetIcon("list"),
+                2,
+                "Enabled Features",
+                function() Library:ToggleEnabledFeatures() end,
+                "≡"
+            )
+            Library.EnabledFeaturesButtonMini = MiniFeatures
+            local MiniFeaturesBadgeHolder = New("Frame", {
+                AnchorPoint = Vector2.new(1, 0),
+                BackgroundColor3 = "AccentColor",
+                Position = UDim2.new(1, 2, 0, 0),
+                Size = UDim2.fromOffset(14, 14),
+                Visible = false,
+                ZIndex = 5,
+                Parent = MiniFeatures,
+            })
+            New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = MiniFeaturesBadgeHolder })
+            local MiniFeaturesBadgeLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = "0",
+                TextColor3 = "BackgroundColor",
+                TextSize = 11,
+                ZIndex = 6,
+                Parent = MiniFeaturesBadgeHolder,
+            })
+            Library.EnabledFeaturesBadgeMini = { Holder = MiniFeaturesBadgeHolder, Label = MiniFeaturesBadgeLabel }
+            table.insert(Library.EnabledFeaturesBadges, Library.EnabledFeaturesBadgeMini)
+            local MiniBell = MiniActionButton(
+                Library:GetIcon("bell"),
+                3,
+                "Notification History",
+                function() Library:ToggleNotificationHistory() end,
+                "!"
+            )
+            Library.NotificationBellMini = MiniBell
+            local MiniBadgeHolder = New("Frame", {
+                AnchorPoint = Vector2.new(1, 0),
+                BackgroundColor3 = "AccentColor",
+                Position = UDim2.new(1, 2, 0, 0),
+                Size = UDim2.fromOffset(14, 14),
+                Visible = false,
+                ZIndex = 5,
+                Parent = MiniBell,
+            })
+            New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = MiniBadgeHolder })
+            local MiniBadgeLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = "0",
+                TextColor3 = "BackgroundColor",
+                TextSize = 11,
+                ZIndex = 6,
+                Parent = MiniBadgeHolder,
+            })
+            table.insert(Library.NotificationBadges, { Holder = MiniBadgeHolder, Label = MiniBadgeLabel })
+            Library:UpdateNotificationBadge()
+
             local RestoreButton = New("TextButton", {
                 BackgroundTransparency = 1,
-                LayoutOrder = 2,
+                LayoutOrder = 4,
                 Size = UDim2.fromOffset(22, 22),
                 Text = RestoreIcon and "" or "^",
                 TextSize = 14,
@@ -10651,6 +11979,172 @@ function Library:CreateWindow(WindowInfo)
             })
         end
 
+        do
+            --// Notification bell: opens the built-in Notification History panel.
+            local BellIcon = Library:GetIcon("bell")
+            local BellRightOffset = WindowInfo.Minimizable and 72 or 42
+            local BellButton = New("TextButton", {
+                AnchorPoint = Vector2.new(1, 0.5),
+                BackgroundColor3 = "MainColor",
+                BackgroundTransparency = 1,
+                Position = UDim2.new(1, -BellRightOffset, 0.5, 0),
+                Size = UDim2.fromOffset(24, 24),
+                Text = BellIcon and "" or "!",
+                TextColor3 = "FontColor",
+                TextSize = 14,
+                TextTransparency = 0.35,
+                ZIndex = 3,
+                Parent = TopBar,
+            })
+            table.insert(Library.Corners, New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = BellButton,
+            }))
+            local BellImage
+            if BellIcon then
+                BellImage = New("ImageLabel", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundTransparency = 1,
+                    Image = BellIcon.Url,
+                    ImageColor3 = "FontColor",
+                    ImageRectOffset = BellIcon.ImageRectOffset,
+                    ImageRectSize = BellIcon.ImageRectSize,
+                    ImageTransparency = 0.35,
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    ScaleType = Enum.ScaleType.Fit,
+                    Size = UDim2.fromOffset(16, 16),
+                    ZIndex = 4,
+                    Parent = BellButton,
+                })
+            end
+            local BadgeHolder = New("Frame", {
+                AnchorPoint = Vector2.new(1, 0),
+                BackgroundColor3 = "AccentColor",
+                Position = UDim2.new(1, 2, 0, -2),
+                Size = UDim2.fromOffset(14, 14),
+                Visible = false,
+                ZIndex = 5,
+                Parent = BellButton,
+            })
+            New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = BadgeHolder })
+            local BadgeLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = "0",
+                TextColor3 = "BackgroundColor",
+                TextSize = 11,
+                ZIndex = 6,
+                Parent = BadgeHolder,
+            })
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 2),
+                PaddingRight = UDim.new(0, 2),
+                Parent = BadgeLabel,
+            })
+            Library.NotificationBadge = { Holder = BadgeHolder, Label = BadgeLabel }
+            table.insert(Library.NotificationBadges, Library.NotificationBadge)
+            Library.NotificationBell = BellButton
+            Library:UpdateNotificationBadge()
+            Library:AddTooltip("Notification History", nil, BellButton)
+            BellButton.MouseEnter:Connect(function()
+                TweenService:Create(BellButton, Library.TweenInfo, { BackgroundTransparency = 0 }):Play()
+                if BellImage then
+                    TweenService:Create(BellImage, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+                end
+            end)
+            BellButton.MouseLeave:Connect(function()
+                TweenService:Create(BellButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
+                if BellImage then
+                    TweenService:Create(BellImage, Library.TweenInfo, { ImageTransparency = 0.35 }):Play()
+                end
+            end)
+            BellButton.MouseButton1Click:Connect(function()
+                Library:ToggleNotificationHistory()
+            end)
+        end
+        do
+            --// Enabled Features button: sits left of the bell.
+            local FeaturesIcon = Library:GetIcon("sliders-horizontal") or Library:GetIcon("list")
+            local FeaturesRightOffset = (WindowInfo.Minimizable and 72 or 42) + 30
+            local FeaturesButton = New("TextButton", {
+                AnchorPoint = Vector2.new(1, 0.5),
+                BackgroundColor3 = "MainColor",
+                BackgroundTransparency = 1,
+                Position = UDim2.new(1, -FeaturesRightOffset, 0.5, 0),
+                Size = UDim2.fromOffset(24, 24),
+                Text = FeaturesIcon and "" or "≡",
+                TextColor3 = "FontColor",
+                TextSize = 16,
+                TextTransparency = 0.35,
+                ZIndex = 3,
+                Parent = TopBar,
+            })
+            table.insert(Library.Corners, New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = FeaturesButton,
+            }))
+            local FeaturesImage
+            if FeaturesIcon then
+                FeaturesImage = New("ImageLabel", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundTransparency = 1,
+                    Image = FeaturesIcon.Url,
+                    ImageColor3 = "FontColor",
+                    ImageRectOffset = FeaturesIcon.ImageRectOffset,
+                    ImageRectSize = FeaturesIcon.ImageRectSize,
+                    ImageTransparency = 0.35,
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    ScaleType = Enum.ScaleType.Fit,
+                    Size = UDim2.fromOffset(16, 16),
+                    ZIndex = 4,
+                    Parent = FeaturesButton,
+                })
+            end
+            local FeaturesBadgeHolder = New("Frame", {
+                AnchorPoint = Vector2.new(1, 0),
+                BackgroundColor3 = "AccentColor",
+                Position = UDim2.new(1, 2, 0, -2),
+                Size = UDim2.fromOffset(14, 14),
+                Visible = false,
+                ZIndex = 5,
+                Parent = FeaturesButton,
+            })
+            New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = FeaturesBadgeHolder })
+            local FeaturesBadgeLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = "0",
+                TextColor3 = "BackgroundColor",
+                TextSize = 11,
+                ZIndex = 6,
+                Parent = FeaturesBadgeHolder,
+            })
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 2),
+                PaddingRight = UDim.new(0, 2),
+                Parent = FeaturesBadgeLabel,
+            })
+            Library.EnabledFeaturesBadge = { Holder = FeaturesBadgeHolder, Label = FeaturesBadgeLabel }
+            table.insert(Library.EnabledFeaturesBadges, Library.EnabledFeaturesBadge)
+            Library.EnabledFeaturesButton = FeaturesButton
+            Library:UpdateEnabledFeaturesBadge()
+            Library:AddTooltip("Enabled Features", nil, FeaturesButton)
+            FeaturesButton.MouseEnter:Connect(function()
+                TweenService:Create(FeaturesButton, Library.TweenInfo, { BackgroundTransparency = 0 }):Play()
+                if FeaturesImage then
+                    TweenService:Create(FeaturesImage, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+                end
+            end)
+            FeaturesButton.MouseLeave:Connect(function()
+                TweenService:Create(FeaturesButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
+                if FeaturesImage then
+                    TweenService:Create(FeaturesImage, Library.TweenInfo, { ImageTransparency = 0.35 }):Play()
+                end
+            end)
+            FeaturesButton.MouseButton1Click:Connect(function()
+                Library:ToggleEnabledFeatures()
+            end)
+        end
         --// Bottom Bar \\--
         BottomBackground = New("Frame", {
             AnchorPoint = Vector2.new(0, 1),
@@ -16088,10 +17582,33 @@ function Library:Unload()
         Library.ActiveLoading:Destroy()
     end
 
+    if Library.NotificationHistoryFrame then
+        Library.NotificationHistoryFrame:Destroy()
+    end
+    if Library.EnabledFeaturesFrame then
+        Library.EnabledFeaturesFrame:Destroy()
+    end
+    Library.NotificationHistoryFrame = nil
+    Library.NotificationHistoryContainer = nil
+    Library.NotificationHistoryRestPos = nil
+    Library.NotificationHistoryOpen = false
+    Library.NotificationUnreadCount = 0
+    Library.NotificationBadge = nil
+    table.clear(Library.NotificationBadges)
+    Library.NotificationBell = nil
+    Library.NotificationBellMini = nil
+    Library.EnabledFeaturesFrame = nil
+    Library.EnabledFeaturesContainer = nil
+    Library.EnabledFeaturesRestPos = nil
+    Library.EnabledFeaturesOpen = false
+    Library.EnabledFeaturesBadge = nil
+    table.clear(Library.EnabledFeaturesBadges)
+    Library.EnabledFeaturesButton = nil
+    Library.EnabledFeaturesButtonMini = nil
+    table.clear(Library.NotificationHistory)
     if ScreenGui then
         ScreenGui:Destroy()
     end
-
     --// Clear tables
     table.clear(Library.Registry)
 
