@@ -299,6 +299,9 @@ local Library = {
         Info = Color3.fromRGB(96, 165, 255),
     },
 
+    --// Floating toggle displays \\--
+    FloatingDisplays = {},
+
     --// Dialogues \\--
     Dialogues = {},
     ActiveDialog = nil,
@@ -572,6 +575,10 @@ local Templates = {
         Risky = false,
         Disabled = false,
         Visible = true,
+
+        -- Optional linked display panel shown beside the window while enabled.
+        ShowDisplay = false,
+        Display = nil,
     },
     Input = {
         Text = "Input",
@@ -2065,6 +2072,26 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
             table.remove(Library.Signals, IdxBegan)
         end
     end)
+end
+
+function Library:SyncFloatingDisplays()
+    for Index = #Library.FloatingDisplays, 1, -1 do
+        local Display = Library.FloatingDisplays[Index]
+        if not Display or Display.Destroyed or not Display.Frame or not Display.Frame.Parent then
+            table.remove(Library.FloatingDisplays, Index)
+        elseif Display.FollowWindow and Display.UpdatePosition then
+            Display:UpdatePosition()
+        end
+    end
+end
+
+function Library:SetFloatingDisplaysShellVisible(Visible: boolean)
+    for Index = #Library.FloatingDisplays, 1, -1 do
+        local Display = Library.FloatingDisplays[Index]
+        if Display and not Display.Destroyed and Display.SetShellVisible then
+            Display:SetShellVisible(Visible)
+        end
+    end
 end
 
 function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: () -> ()?)
@@ -5958,6 +5985,10 @@ do
             Addons = {},
             AnyKeyPickerPicking = false,
 
+            ShowDisplay = Info.ShowDisplay == true,
+            DisplayInfo = Info.Display,
+            DisplayPanel = nil,
+
             Variant = "Switch",
             Type = "Toggle",
         }
@@ -6122,6 +6153,263 @@ do
             Library:SafeCallback(Toggle.Changed, Toggle.Value)
         end
 
+        function Toggle:CreateDisplay(DisplayInfo)
+            if Toggle.DisplayPanel then
+                Toggle.DisplayPanel:Destroy()
+                Toggle.DisplayPanel = nil
+            end
+            if not Toggle.ShowDisplay then
+                return nil
+            end
+
+            if typeof(DisplayInfo) == "function" then
+                DisplayInfo = { Build = DisplayInfo }
+            elseif typeof(DisplayInfo) ~= "table" then
+                DisplayInfo = {}
+            end
+            local Main = Library.MainFrame
+            local Parent = ScreenGui
+            if not Parent then
+                return nil
+            end
+
+            local Display = {
+                Destroyed = false,
+                Visible = false,
+                ShellVisible = true,
+                FollowWindow = DisplayInfo.FollowWindow ~= false,
+                Draggable = DisplayInfo.Draggable == true,
+                Offset = typeof(DisplayInfo.Offset) == "Vector2" and DisplayInfo.Offset or Vector2.new(18, 0),
+                Toggle = Toggle,
+                Window = Window,
+            }
+            local DisplaySize = typeof(DisplayInfo.Size) == "UDim2" and DisplayInfo.Size or UDim2.fromOffset(300, 220)
+            local DisplayTitle = tostring(DisplayInfo.Title or Toggle.Text or "Display")
+            local DisplayTweenInfo = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+            local DisplayCloseTweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+
+            local Frame = New("CanvasGroup", {
+                BackgroundColor3 = DisplayInfo.BackgroundColor3 or "BackgroundColor",
+                BackgroundTransparency = typeof(DisplayInfo.BackgroundTransparency) == "number" and DisplayInfo.BackgroundTransparency or 0,
+                ClipsDescendants = true,
+                GroupTransparency = 1,
+                Name = DisplayInfo.Name or ("ToggleDisplay_" .. tostring(Idx)),
+                Position = DisplayInfo.Position or UDim2.fromOffset(0, 0),
+                Size = DisplaySize,
+                Visible = false,
+                ZIndex = DisplayInfo.ZIndex or 60,
+                Parent = Parent,
+            })
+            Display.Frame = Frame
+            Display.Root = Frame
+            Library:AddOutline(Frame)
+            table.insert(Library.Corners, New("UICorner", {
+                CornerRadius = UDim.new(0, DisplayInfo.CornerRadius or Library.CornerRadius),
+                Parent = Frame,
+            }))
+
+            local TitleBar = New("TextButton", {
+                Active = true,
+                BackgroundColor3 = DisplayInfo.TitleBarColor3 or "MainColor",
+                BackgroundTransparency = typeof(DisplayInfo.TitleBarTransparency) == "number" and DisplayInfo.TitleBarTransparency or 0,
+                Size = UDim2.new(1, 0, 0, 34),
+                Text = "",
+                ZIndex = Frame.ZIndex + 1,
+                Parent = Frame,
+            })
+            Display.TitleBar = TitleBar
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 12),
+                PaddingRight = UDim.new(0, 8),
+                Parent = TitleBar,
+            })
+            local TitleLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -28, 1, 0),
+                Text = DisplayTitle,
+                TextColor3 = "FontColor",
+                TextSize = 14,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = Frame.ZIndex + 2,
+                Parent = TitleBar,
+            })
+            Display.TitleLabel = TitleLabel
+
+            local CloseButton
+            if DisplayInfo.CloseButton ~= false then
+                CloseButton = New("TextButton", {
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    BackgroundTransparency = 1,
+                    Position = UDim2.new(1, -8, 0.5, 0),
+                    Size = UDim2.fromOffset(20, 20),
+                    Text = "×",
+                    TextColor3 = "FontColor",
+                    TextSize = 18,
+                    TextTransparency = 0.35,
+                    ZIndex = Frame.ZIndex + 2,
+                    Parent = TitleBar,
+                })
+                CloseButton.MouseButton1Click:Connect(function()
+                    Display:SetVisible(false)
+                end)
+            end
+            Display.CloseButton = CloseButton
+
+            local Content = New("Frame", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(0, 34),
+                Size = UDim2.new(1, 0, 1, -34),
+                ZIndex = Frame.ZIndex + 1,
+                Parent = Frame,
+            })
+            Display.Content = Content
+
+            function Display:Create(ClassName, Properties)
+                assert(typeof(ClassName) == "string", "Display:Create requires a class name")
+                Properties = typeof(Properties) == "table" and table.clone(Properties) or {}
+                if Properties.Parent == nil then
+                    Properties.Parent = Content
+                end
+                local Success, InstanceOrError = pcall(New, ClassName, Properties)
+                assert(Success, InstanceOrError)
+                return InstanceOrError
+            end
+            Display.New = Display.Create
+            Display.Add = Display.Create
+            function Display:AddFrame(Properties) return self:Create("Frame", Properties) end
+            function Display:AddScrollingFrame(Properties) return self:Create("ScrollingFrame", Properties) end
+            function Display:AddTextButton(Properties) return self:Create("TextButton", Properties) end
+            function Display:AddButton(Properties) return self:Create("TextButton", Properties) end
+            function Display:AddTextLabel(Properties) return self:Create("TextLabel", Properties) end
+            function Display:AddImageLabel(Properties) return self:Create("ImageLabel", Properties) end
+            function Display:AddImage(Properties)
+                Properties = typeof(Properties) == "table" and table.clone(Properties) or {}
+                if typeof(Properties.Image) == "string" then
+                    local Icon = Library:GetCustomIcon(Properties.Image)
+                    if Icon then
+                        Properties.Image = Icon.Url
+                        Properties.ImageRectOffset = Icon.ImageRectOffset
+                        Properties.ImageRectSize = Icon.ImageRectSize
+                    end
+                end
+                return self:Create("ImageLabel", Properties)
+            end
+            function Display:SetTitle(NewTitle)
+                DisplayTitle = tostring(NewTitle or "")
+                TitleLabel.Text = DisplayTitle
+            end
+            function Display:SetVisible(NewVisible, Immediate)
+                NewVisible = NewVisible == true
+                Display.Visible = NewVisible
+                if not Display.ShellVisible then
+                    Frame.Visible = false
+                    return
+                end
+                if Immediate then
+                    Frame.Visible = NewVisible
+                    Frame.GroupTransparency = NewVisible and 0 or 1
+                    Display:UpdatePosition()
+                    return
+                end
+                Display:UpdatePosition()
+                if NewVisible then
+                    Frame.Visible = true
+                    Frame.GroupTransparency = 1
+                    local StartPosition = Frame.Position + UDim2.fromOffset(10, 0)
+                    Frame.Position = StartPosition
+                    TweenService:Create(Frame, DisplayTweenInfo, {
+                        GroupTransparency = 0,
+                        Position = Display.RestPosition,
+                    }):Play()
+                else
+                    local EndPosition = Display.RestPosition + UDim2.fromOffset(10, 0)
+                    local Tween = TweenService:Create(Frame, DisplayCloseTweenInfo, {
+                        GroupTransparency = 1,
+                        Position = EndPosition,
+                    })
+                    Tween.Completed:Once(function()
+                        if not Display.Visible and Frame.Parent then
+                            Frame.Visible = false
+                        end
+                    end)
+                    Tween:Play()
+                end
+            end
+            function Display:SetShellVisible(NewVisible)
+                Display.ShellVisible = NewVisible == true
+                if not Display.ShellVisible then
+                    Frame.Visible = false
+                    return
+                end
+                if Display.Visible then
+                    Display:SetVisible(true, true)
+                end
+            end
+            function Display:UpdatePosition()
+                if Display.Destroyed then return end
+                if Display.FollowWindow and Main and Main.Parent then
+                    local MainPosition = Main.Position
+                    local MainWidth = Main.AbsoluteSize.X / math.max(Library.DPIScale or 1, 0.01)
+                    Display.RestPosition = UDim2.new(
+                        MainPosition.X.Scale,
+                        MainPosition.X.Offset + MainWidth + Display.Offset.X,
+                        MainPosition.Y.Scale,
+                        MainPosition.Y.Offset + Display.Offset.Y
+                    )
+                    if not Frame.Visible or not Display.Visible then
+                        Frame.Position = Display.RestPosition
+                    end
+                else
+                    Display.RestPosition = DisplayInfo.Position or Frame.Position
+                end
+            end
+            function Display:Destroy()
+                if Display.Destroyed then return end
+                Display.Destroyed = true
+                if Frame then Frame:Destroy() end
+                local Position = table.find(Library.FloatingDisplays, Display)
+                if Position then table.remove(Library.FloatingDisplays, Position) end
+                if Toggle.DisplayPanel == Display then
+                    Toggle.DisplayPanel = nil
+                end
+            end
+
+            local Build = DisplayInfo.Build or DisplayInfo.Content
+            if typeof(Build) == "function" then
+                Library:SafeCallback(Build, Display)
+            end
+            if typeof(DisplayInfo.Children) == "table" then
+                for _, Child in ipairs(DisplayInfo.Children) do
+                    if typeof(Child) == "table" then
+                        local Properties = Child.Properties or table.clone(Child)
+                        Properties.ClassName = nil
+                        local ClassName = Child.ClassName or "Frame"
+                        Display:Create(ClassName, Properties)
+                    end
+                end
+            end
+
+            if Display.Draggable then
+                Display.FollowWindow = false
+                Library:MakeDraggable(Frame, TitleBar, true)
+            end
+            table.insert(Library.FloatingDisplays, Display)
+            Display:UpdatePosition()
+            Display:SetVisible(Toggle.Value == true, true)
+            Toggle.DisplayPanel = Display
+            return Display
+        end
+
+        function Toggle:UpdateDisplay()
+            if not Toggle.ShowDisplay then
+                return
+            end
+            if Toggle.DisplayPanel then
+                Toggle.DisplayPanel:SetVisible(Toggle.Value == true)
+            end
+        end
+
         function Toggle:SetValue(Value)
             if Toggle.Disabled then
                 return
@@ -6142,6 +6430,7 @@ do
             if not Toggle.AnyKeyPickerPicking then
                 Toggle:RunChanged()
             end
+            Toggle:UpdateDisplay()
         end
 
         function Toggle:SetDisabled(Disabled: boolean)
@@ -6202,11 +6491,15 @@ do
         table.insert(Groupbox.Elements, Toggle)
 
         Toggle.Default = Toggle.Value
-
         Toggles[Idx] = Toggle
-
+        if Toggle.ShowDisplay then
+            Toggle:CreateDisplay(Toggle.DisplayInfo)
+        end
         function Toggle:Destroy()
             Toggle.Destroyed = true
+            if Toggle.DisplayPanel then
+                Toggle.DisplayPanel:Destroy()
+            end
 
             if Toggle.Connections then
                 for _, Connection in Toggle.Connections do
@@ -11220,6 +11513,8 @@ function Library:CreateWindow(WindowInfo)
     Library.TabSwipeFrom = WindowInfo.TabSwipeFrom or "right"
 
     local MainFrame
+    local MainWindowScale
+    local MiniWindowScale
     local DividerLine
     local TitleHolder
     local WindowTitle
@@ -11251,6 +11546,7 @@ function Library:CreateWindow(WindowInfo)
     local IsCompact = WindowInfo.SidebarCompacted
     local LastExpandedWidth = InitialLeftWidth
     local Minimized = false
+    local MinimizeMotionToken = 0
     local ApplyWindowVisibility
     --// Extra room reserved at the right of the top bar for the minimize button,
     --// which sits beside the move icon rather than in the search row
@@ -11282,12 +11578,9 @@ function Library:CreateWindow(WindowInfo)
                 Parent = MainFrame,
             })
         )
-        table.insert(
-            Library.Scales,
-            New("UIScale", {
-                Parent = MainFrame,
-            })
-        )
+        MainWindowScale = New("UIScale", {
+            Parent = MainFrame,
+        })
         Library:AddOutline(MainFrame)
         Glow = New("ImageLabel", {
             BackgroundTransparency = 1,
@@ -11347,6 +11640,9 @@ function Library:CreateWindow(WindowInfo)
             Parent = MainFrame,
         })
         Library:MakeDraggable(MainFrame, TopBar, false, true)
+        Library:GiveSignal(MainFrame:GetPropertyChangedSignal("Position"):Connect(function()
+            Library:SyncFloatingDisplays()
+        end))
 
         --// Title \\--
         TitleHolder = New("Frame", {
@@ -11677,12 +11973,9 @@ function Library:CreateWindow(WindowInfo)
                     Parent = MiniFrame,
                 })
             )
-            table.insert(
-                Library.Scales,
-                New("UIScale", {
-                    Parent = MiniFrame,
-                })
-            )
+            MiniWindowScale = New("UIScale", {
+                Parent = MiniFrame,
+            })
             Library:AddOutline(MiniFrame)
 
             New("UIListLayout", {
@@ -12657,18 +12950,74 @@ function Library:CreateWindow(WindowInfo)
         if Value == Minimized then
             return
         end
+
+        MinimizeMotionToken += 1
+        local MotionToken = MinimizeMotionToken
         Minimized = Value
 
         if Minimized then
-            --// Open the pill where the window was, so it does not jump across the screen
+            -- Keep the pill anchored to the exact location of the full window.
             MiniFrame.Position = MainFrame.Position
             MiniFrame.AnchorPoint = MainFrame.AnchorPoint
+            MiniFrame.Visible = Library.Toggled
+            if MainWindowScale then MainWindowScale.Scale = 1 end
+            if MiniWindowScale then MiniWindowScale.Scale = 0.78 end
+
+            Library:SetFloatingDisplaysShellVisible(false)
+            local MainTween = MainWindowScale and TweenService:Create(
+                MainWindowScale,
+                TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                { Scale = 0.92 }
+            )
+            local MiniTween = MiniWindowScale and TweenService:Create(
+                MiniWindowScale,
+                TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                { Scale = 1 }
+            )
+            MainFrame.Visible = Library.Toggled
+            if MainTween then MainTween:Play() end
+            task.delay(0.08, function()
+                if MotionToken ~= MinimizeMotionToken or not Minimized then return end
+                if MiniTween then MiniTween:Play() end
+            end)
+            task.delay(0.22, function()
+                if MotionToken ~= MinimizeMotionToken or not Minimized then return end
+                MainFrame.Visible = false
+                MiniFrame.Visible = Library.Toggled
+                Library:SyncFloatingDisplays()
+            end)
         else
+            -- Restore from the pill’s current drag position without jumping.
             MainFrame.Position = MiniFrame.Position
             MainFrame.AnchorPoint = MiniFrame.AnchorPoint
-        end
+            MainFrame.Visible = Library.Toggled
+            MiniFrame.Visible = Library.Toggled
+            if MiniWindowScale then MiniWindowScale.Scale = 1 end
+            if MainWindowScale then MainWindowScale.Scale = 0.92 end
 
-        ApplyWindowVisibility()
+            Library:SetFloatingDisplaysShellVisible(Library.Toggled)
+            local MiniTween = MiniWindowScale and TweenService:Create(
+                MiniWindowScale,
+                TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                { Scale = 0.84 }
+            )
+            local MainTween = MainWindowScale and TweenService:Create(
+                MainWindowScale,
+                TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                { Scale = 1 }
+            )
+            if MiniTween then MiniTween:Play() end
+            task.delay(0.06, function()
+                if MotionToken ~= MinimizeMotionToken or Minimized then return end
+                if MainTween then MainTween:Play() end
+            end)
+            task.delay(0.22, function()
+                if MotionToken ~= MinimizeMotionToken or Minimized then return end
+                MiniFrame.Visible = false
+                MainFrame.Visible = Library.Toggled
+                Library:SyncFloatingDisplays()
+            end)
+        end
     end
 
     function Window:ToggleMinimized()
@@ -13015,10 +13364,11 @@ function Library:CreateWindow(WindowInfo)
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(0, 7),
             Size = UDim2.fromScale(1, 0),
-            Visible = true,
+            -- The component is opt-in. It remains absent visually until
+            -- Tab:UserPanelBox(...) is explicitly called for this tab.
+            Visible = false,
             Parent = TabContainer,
         })
-
         -- Keep the original local names because the tab layout code uses this
         -- surface as the first block above the left/right content columns.
         local WarningBoxHolder = UserPanelBoxHolder
@@ -13038,6 +13388,7 @@ function Library:CreateWindow(WindowInfo)
         local UserPanelInformationLayout
         local UserPanelInformationLabels = {}
         local UserPanelAvatarRequest = 0
+        local UserPanelGlowStroke
 
         do
             WarningBox = New("Frame", {
@@ -13054,6 +13405,15 @@ function Library:CreateWindow(WindowInfo)
                 })
             )
             WarningBoxOutline, WarningBoxShadowOutline = Library:AddOutline(WarningBox)
+            -- A restrained accent rim gives the panel a designer-made glow
+            -- without changing the opaque surface or introducing glass effects.
+            UserPanelGlowStroke = New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                Color = "AccentColor",
+                Thickness = 4,
+                Transparency = 1,
+                Parent = WarningBox,
+            })
 
             WarningBoxScrollingFrame = New("ScrollingFrame", {
                 BackgroundTransparency = 1,
@@ -13350,8 +13710,13 @@ function Library:CreateWindow(WindowInfo)
             },
 
             UserPanelState = {
+                Defined = false,
                 IsNormal = true,
                 LockSize = false,
+                Glow = false,
+                GlowColor = nil,
+                GlowThickness = 4,
+                GlowTransparency = 0.72,
                 Title = "",
                 Username = "",
                 UserIcon = nil,
@@ -13378,6 +13743,10 @@ function Library:CreateWindow(WindowInfo)
             local PanelOutline = IsNormal and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
             local TextColor = IsNormal and Library.Scheme.FontColor or Color3.fromRGB(255, 50, 50)
             local AvatarBackground = IsNormal and Library.Scheme.MainColor or Color3.fromRGB(95, 0, 0)
+            local GlowColor = State.GlowColor
+            if typeof(GlowColor) ~= "Color3" then
+                GlowColor = IsNormal and Library.Scheme.AccentColor or Color3.fromRGB(255, 50, 50)
+            end
 
             WarningBox.BackgroundColor3 = PanelBackground
             WarningBoxShadowOutline.Color = PanelShadow
@@ -13386,6 +13755,9 @@ function Library:CreateWindow(WindowInfo)
             WarningStroke.Color = PanelOutline
             UserPanelAvatar.BackgroundColor3 = AvatarBackground
             UserPanelAvatarStroke.Color = PanelOutline
+            UserPanelGlowStroke.Color = GlowColor
+            UserPanelGlowStroke.Thickness = math.max(1, tonumber(State.GlowThickness) or 4)
+            UserPanelGlowStroke.Transparency = State.Glow and math.clamp(tonumber(State.GlowTransparency) or 0.72, 0, 1) or 1
 
             if not Library.Registry[WarningBox] then
                 Library:AddToRegistry(WarningBox, {})
@@ -13407,6 +13779,9 @@ function Library:CreateWindow(WindowInfo)
             end
             if not Library.Registry[UserPanelAvatarStroke] then
                 Library:AddToRegistry(UserPanelAvatarStroke, {})
+            end
+            if not Library.Registry[UserPanelGlowStroke] then
+                Library:AddToRegistry(UserPanelGlowStroke, {})
             end
 
             Library.Registry[WarningBox].BackgroundColor3 = function()
@@ -13436,6 +13811,17 @@ function Library:CreateWindow(WindowInfo)
             Library.Registry[UserPanelAvatarStroke].Color = function()
                 local Current = Tab.UserPanelState.IsNormal == true
                 return Current and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
+            end
+            Library.Registry[UserPanelGlowStroke].Color = function()
+                local CurrentState = Tab.UserPanelState
+                if typeof(CurrentState.GlowColor) == "Color3" then
+                    return CurrentState.GlowColor
+                end
+                return CurrentState.IsNormal and Library.Scheme.AccentColor or Color3.fromRGB(255, 50, 50)
+            end
+            Library.Registry[UserPanelGlowStroke].Transparency = function()
+                local CurrentState = Tab.UserPanelState
+                return CurrentState.Glow and math.clamp(tonumber(CurrentState.GlowTransparency) or 0.72, 0, 1) or 1
             end
 
             for _, Label in ipairs(UserPanelInformationLabels) do
@@ -13488,8 +13874,32 @@ function Library:CreateWindow(WindowInfo)
             Info = Info or {}
             local State = Tab.UserPanelState
 
+            State.Defined = true
             if typeof(Info.IsNormal) == "boolean" then
                 State.IsNormal = Info.IsNormal
+            end
+            if typeof(Info.Glow) == "boolean" then
+                State.Glow = Info.Glow
+            elseif typeof(Info.Glow) == "table" then
+                State.Glow = Info.Glow.Enabled ~= false
+                if typeof(Info.Glow.Color) == "Color3" then
+                    State.GlowColor = Info.Glow.Color
+                end
+                if typeof(Info.Glow.Thickness) == "number" then
+                    State.GlowThickness = Info.Glow.Thickness
+                end
+                if typeof(Info.Glow.Transparency) == "number" then
+                    State.GlowTransparency = Info.Glow.Transparency
+                end
+            end
+            if typeof(Info.GlowColor) == "Color3" then
+                State.GlowColor = Info.GlowColor
+            end
+            if typeof(Info.GlowThickness) == "number" then
+                State.GlowThickness = Info.GlowThickness
+            end
+            if typeof(Info.GlowTransparency) == "number" then
+                State.GlowTransparency = Info.GlowTransparency
             end
             if typeof(Info.LockSize) == "boolean" then
                 State.LockSize = Info.LockSize
@@ -13540,6 +13950,21 @@ function Library:CreateWindow(WindowInfo)
             return Tab
         end
 
+        function Tab:SetUserPanelGlow(Enabled, GlowInfo)
+            local State = Tab.UserPanelState
+            State.Defined = true
+            State.Glow = Enabled == true
+            if typeof(GlowInfo) == "table" then
+                if typeof(GlowInfo.Color) == "Color3" then State.GlowColor = GlowInfo.Color end
+                if typeof(GlowInfo.Thickness) == "number" then State.GlowThickness = GlowInfo.Thickness end
+                if typeof(GlowInfo.Transparency) == "number" then State.GlowTransparency = GlowInfo.Transparency end
+            end
+            WarningBoxHolder.Visible = true
+            Tab:RefreshUserPanelTheme()
+            Tab:Resize(true)
+            return Tab
+        end
+
         function Tab:UpdateUserPanelBox(Info)
             return self:UserPanelBox(Info)
         end
@@ -13558,6 +13983,10 @@ function Library:CreateWindow(WindowInfo)
                 Information = Info.Information or Info.Text,
                 Username = Info.Username,
                 UserIcon = Info.UserIcon,
+                Glow = Info.Glow,
+                GlowColor = Info.GlowColor,
+                GlowThickness = Info.GlowThickness,
+                GlowTransparency = Info.GlowTransparency,
             })
         end
 
@@ -16229,6 +16658,8 @@ function Library:CreateWindow(WindowInfo)
         if MiniFrame then
             MiniFrame.Visible = Library.Toggled and Minimized
         end
+        Library:SetFloatingDisplaysShellVisible(Library.Toggled and not Minimized)
+        Library:SyncFloatingDisplays()
     end
 
     function Window:Toggle(Value: boolean?)
@@ -17606,6 +18037,13 @@ function Library:Unload()
     Library.EnabledFeaturesButton = nil
     Library.EnabledFeaturesButtonMini = nil
     table.clear(Library.NotificationHistory)
+    for Index = #Library.FloatingDisplays, 1, -1 do
+        local Display = Library.FloatingDisplays[Index]
+        if Display and Display.Destroy then
+            Library:SafeCallback(Display.Destroy, Display)
+        end
+        table.remove(Library.FloatingDisplays, Index)
+    end
     if ScreenGui then
         ScreenGui:Destroy()
     end
@@ -17633,6 +18071,7 @@ function Library:Unload()
     table.clear(Library.DraggableElements)
     table.clear(Library.KeybindToggles)
     table.clear(Library.DependencyBoxes)
+    table.clear(Library.FloatingDisplays)
 
     table.clear(TransparencyCache)
     table.clear(ActiveTabTweens)

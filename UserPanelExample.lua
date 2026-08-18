@@ -52,6 +52,13 @@ InfoTab:UserPanelBox({
         "Game: Steal An Egg",
         { Label = "Version", Value = "First Release V1" },
     },
+    -- Glow is opt-in and only applies because this UserPanelBox is defined.
+    Glow = {
+        Enabled = true,
+        Color = Color3.fromRGB(80, 150, 255),
+        Thickness = 4,
+        Transparency = 0.72,
+    },
 })
 
 -- Left side: changelog.
@@ -85,6 +92,51 @@ SettingsBox:AddToggle("BlurToggle", {
     Callback = function(enabled)
         print("Background blur:", enabled)
     end,
+})
+
+-- Optional floating display example. It is created only when ShowDisplay = true,
+-- and its Build callback can create normal Roblox UI instances.
+SettingsBox:AddToggle("DisplayPreview", {
+    Text = "Show Custom Display",
+    Default = false,
+    ShowDisplay = true,
+    Display = {
+        Title = "Custom Display",
+        Size = UDim2.fromOffset(300, 190),
+        Offset = Vector2.new(18, 0),
+        Build = function(Display)
+            Display:AddFrame({
+                BackgroundColor3 = "BackgroundColor",
+                BackgroundTransparency = 0,
+                Position = UDim2.fromOffset(12, 12),
+                Size = UDim2.new(1, -24, 1, -58),
+            })
+            Display:AddTextLabel({
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(12, 20),
+                Size = UDim2.new(1, -24, 0, 48),
+                Text = "This panel is linked to the window and follows it.",
+                TextWrapped = true,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+            })
+            local Action = Display:AddTextButton({
+                BackgroundColor3 = "AccentColor",
+                Position = UDim2.fromOffset(12, 128),
+                Size = UDim2.new(1, -24, 0, 30),
+                Text = "Test TextButton",
+                TextSize = 13,
+            })
+            Action.MouseButton1Click:Connect(function()
+                Library:Notify({
+                    Title = "Custom Display",
+                    Description = "The custom TextButton works.",
+                    Duration = 2,
+                })
+            end)
+        end,
+    },
 })
 
 local KeybindLabel = SettingsBox:AddLabel("Window Keybind")
