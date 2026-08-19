@@ -62,13 +62,13 @@ InfoTab:UserPanelBox({
 })
 
 -- Left side: changelog.
-local ChangelogBox = InfoTab:AddLeftGroupbox("Changelog", "history")
+local ChangelogBox = InfoTab:AddLeftGroupbox("Changelog", "history", true, false, false)
 
 ChangelogBox:AddLabel("Update Changelogs")
 ChangelogBox:AddLabel("First Release V1")
 
 -- Right side: game details.
-local GameDetailsBox = InfoTab:AddRightGroupbox("Steal An Egg", "gamepad-2")
+local GameDetailsBox = InfoTab:AddRightGroupbox("Steal An Egg", "gamepad-2", true, false, false)
 
 -- GameThumbnail automatically uses the current game's PlaceId. No image URL
 -- is required; the title/groupbox name can describe the game normally.
@@ -84,7 +84,7 @@ GameDetailsBox:AddLabel("Steal An Egg")
 GameDetailsBox:AddLabel("Game details and information")
 GameDetailsBox:AddLabel("Status: First Release V1")
 
-local SettingsBox = SettingsTab:AddLeftGroupbox("Settings", "settings-2")
+local SettingsBox = SettingsTab:AddLeftGroupbox("Settings", "settings-2", true, false, false)
 
 SettingsBox:AddToggle("BlurToggle", {
     Text = "Background Blur",
