@@ -1,36 +1,90 @@
 --[[
-    Nnd / Modded Obsidian UI - Complete Example
+    Nnd / Modded Obsidian UI
+    Complete component gallery and normal usage example.
 
-    Included current features:
-    - UserPanelBox with optional Roblox headshot and configurable glow
-    - GameThumbnail and direct CDN image support
-    - Notification History and Enabled Features header panels
-    - Collapsible groupboxes
-    - Toggle, slider, dropdown, input, label, image, button, and hold button
-    - KeyPicker and window minimize/restore animation controls
-    - Safe unload cleanup
-    - Sequential pre-window AddPopup/AddNextPopup dialogs
-    - Groupbox:AddTabbox1 nested tabs
+    This example intentionally contains no game-specific automation or gameplay
+    logic. It demonstrates the UI library itself:
 
-    The old floating display component was removed.
+    Window configuration, popups, tabs, UserPanelBox, theme presets, runtime
+    scheme refresh, color pickers, toggles, checkboxes, key pickers, sliders,
+    single and multi dropdowns, inputs, labels, dividers, buttons, hold buttons,
+    images, GameThumbnail, video, viewport, UI passthrough, dependency boxes,
+    dependency groupboxes, nested tabboxes, subtabs, notifications, minimize /
+    restore animation, and safe unload.
+
+    Important color-picker usage:
+        local Toggle = Box:AddToggle("ToggleId", { Text = "..." })
+        Toggle:AddColorPicker("ColorId", {
+            Default = Color3.fromRGB(125, 85, 255),
+            Title = "Accent color",
+            Callback = function(Color) end,
+        })
+
+    AddColorPicker is an addon method. It is attached to the toggle or label;
+    the returned object is the parent control. The actual picker is available
+    through Library.Options["ColorId"] for SetValueRGB and config restore.
 ]]
 
 local Library = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/IsnowDev7/Nnd/main/Library_lua_password_feature.lua"
 ))()
 
+local ThemePresets = {
+    Midnight = {
+        BackgroundColor = Color3.fromRGB(15, 15, 15),
+        MainColor = Color3.fromRGB(25, 25, 25),
+        AccentColor = Color3.fromRGB(125, 85, 255),
+        OutlineColor = Color3.fromRGB(40, 40, 40),
+        FontColor = Color3.fromRGB(245, 245, 245),
+    },
+    Ocean = {
+        BackgroundColor = Color3.fromRGB(10, 20, 30),
+        MainColor = Color3.fromRGB(18, 34, 48),
+        AccentColor = Color3.fromRGB(65, 170, 235),
+        OutlineColor = Color3.fromRGB(35, 75, 95),
+        FontColor = Color3.fromRGB(235, 248, 255),
+    },
+    Forest = {
+        BackgroundColor = Color3.fromRGB(13, 24, 19),
+        MainColor = Color3.fromRGB(22, 39, 29),
+        AccentColor = Color3.fromRGB(84, 190, 116),
+        OutlineColor = Color3.fromRGB(42, 78, 53),
+        FontColor = Color3.fromRGB(237, 248, 239),
+    },
+    Paper = {
+        BackgroundColor = Color3.fromRGB(224, 226, 230),
+        MainColor = Color3.fromRGB(245, 246, 248),
+        AccentColor = Color3.fromRGB(70, 100, 190),
+        OutlineColor = Color3.fromRGB(180, 184, 193),
+        FontColor = Color3.fromRGB(35, 38, 45),
+    },
+}
+
+local function ApplyTheme(Name)
+    local Preset = ThemePresets[Name]
+    if not Preset then
+        return
+    end
+
+    for Key, Value in pairs(Preset) do
+        Library.Scheme[Key] = Value
+    end
+
+    Library.IsLightTheme = Name == "Paper"
+    Library:UpdateColorsUsingRegistry()
+end
+
 local Window = Library:CreateWindow({
-    Title = "Steal An Egg | Nnd Example",
-    SubTitle = "Modded Obsidian UI",
-    Footer = "Complete Component Demo",
-    Size = UDim2.fromOffset(760, 540),
-    Position = UDim2.new(0.5, -380, 0.5, -270),
+    Title = "Nnd UI Component Gallery",
+    SubTitle = "Normal Obsidian-style usage",
+    Footer = "Complete Demo",
+    Size = UDim2.fromOffset(820, 590),
+    Position = UDim2.new(0.5, -410, 0.5, -295),
     Center = true,
     CornerRadius = 10,
     ToggleKeybind = Enum.KeyCode.RightControl,
     Icon = "rbxassetid://6031075931",
 
-    -- Existing window appearance and transition options.
     BackgroundBlur = true,
     TitleAnimation = true,
     IconAnimation = true,
@@ -47,31 +101,27 @@ local Window = Library:CreateWindow({
     TabSwipeOffset = 26,
     TabSwipeFrom = "bottom",
 
-    -- These values are consumed by the current minimize/restore implementation.
-    -- The library synchronizes the main window and minimized card automatically.
     Minimizable = true,
-    MinimizedWidth = 280,
+    MinimizedWidth = 300,
     MinimizedSubtitle = "RightControl to reopen",
 
-    -- These popups appear before the main window opens. The second item is
-    -- shown after the first popup's Proceed button is pressed.
     Popups = {
         {
-            Title = "News!",
+            Title = "Welcome to the Nnd gallery",
             Image = "rbxassetid://6031075931",
-            Description = "Yoooo, a new update just dropped.",
-            ButtonText = "Proceed",
+            Description = "This is a normal component demo. It contains no gameplay automation or game-specific logic.",
+            ButtonText = "Continue",
         },
         {
-            Title = "New Update",
+            Title = "What is included",
             Image = "https://tr.rbxcdn.com/180DAY-79e666901b2c722b06310d267bc6c152/768/432/Image/Webp/noFilter",
-            Description = "Notification History, Enabled Features, glow, and synchronized animations are ready.",
-            ButtonText = "Open UI",
+            Description = "Explore controls, themes, config profiles, nested tabs, media, dependencies, notifications, and lifecycle actions.",
+            ButtonText = "Open Gallery",
         },
     },
 })
 
-Window:SetSidebarWidth(44)
+Window:SetSidebarWidth(48)
 Window:SetCornerRadius(10)
 Window:SetMinimizedSubtitle("RightControl to reopen")
 
@@ -84,107 +134,91 @@ local InfoTab = Window:AddTab({
 local ComponentsTab = Window:AddTab({
     Name = "Components",
     Icon = "layout-grid",
-    IconColor = "PurpleColor",
+    IconColor = "AccentColor",
 })
 
-local SettingsTab = Window:AddTab({
-    Name = "Settings",
-    Icon = "settings",
-    IconColor = "GreenColor",
+local AdvancedTab = Window:AddTab({
+    Name = "Advanced",
+    Icon = "panels-top-left",
+    IconColor = "WhiteColor",
 })
 
---[[
-    USER PANEL
+local ThemeTab = Window:AddTab({
+    Name = "Theme",
+    Icon = "palette",
+    IconColor = "RedColor",
+})
 
-    This panel is created only because UserPanelBox is explicitly defined here.
-    If a tab does not call UserPanelBox, no small placeholder panel appears.
-]]
+local ConfigTab = Window:AddTab({
+    Name = "Config",
+    Icon = "folder-cog",
+    IconColor = "BlueColor",
+})
+
+local LifecycleTab = Window:AddTab({
+    Name = "Lifecycle",
+    Icon = "power",
+    IconColor = "BlueColor",
+})
+
+--// INFO TAB ---------------------------------------------------------------
+
 InfoTab:UserPanelBox({
-    Title = "Welcome to the Nnd Example",
+    Title = "Welcome to the Nnd Component Gallery",
     UserIcon = true,
     Username = true,
     Information = {
-        "Game: Steal An Egg",
-        "UI: Modded Obsidian",
-        { Label = "Release", Value = "First Release V1" },
-        { Label = "Status", Value = "All systems ready" },
+        "UI library showcase",
+        "Theme, config, controls, and advanced elements",
+        { Label = "Status", Value = "Ready" },
+        { Label = "Mode", Value = "Demo only" },
     },
     Glow = {
         Enabled = true,
-        Color = Color3.fromRGB(80, 150, 255),
+        Color = Color3.fromRGB(125, 85, 255),
         Thickness = 4,
         Transparency = 0.72,
     },
 })
 
-local ChangelogBox = InfoTab:AddLeftGroupbox(
-    "Changelog",
-    "history",
-    true,
-    false,
-    false
-)
+local ChangelogBox = InfoTab:AddLeftGroupbox("Changelog", "history", true, false, false)
+ChangelogBox:AddLabel("Nnd UI Component Gallery")
+ChangelogBox:AddDivider("Release Notes")
+ChangelogBox:AddLabel("Color picker restored with the correct addon usage")
+ChangelogBox:AddLabel("Theme presets refresh registered UI colors")
+ChangelogBox:AddLabel("Multi-dropdown and dependency examples added")
+ChangelogBox:AddLabel("Demo content is intentionally UI-only")
+ChangelogBox:AddLabel("Groupboxes remain collapsible by title row or arrow")
 
-ChangelogBox:AddLabel("Update Changelogs")
-ChangelogBox:AddLabel("First Release V1")
-ChangelogBox:AddLabel("UserPanel glow support added")
-ChangelogBox:AddLabel("Notification History added")
-ChangelogBox:AddLabel("Enabled Features panel added")
-ChangelogBox:AddLabel("Synchronized minimize animation added")
-
-local GameDetailsBox = InfoTab:AddRightGroupbox(
-    "Steal An Egg",
-    "gamepad-2",
-    true,
-    false,
-    false
-)
-
--- Automatically loads the current game's thumbnail using game.PlaceId.
-GameDetailsBox:AddImage("GameThumbnail", {
+local DetailsBox = InfoTab:AddRightGroupbox("Library Details", "book-open", true, false, false)
+DetailsBox:AddImage("GameThumbnail", {
     GameThumbnail = true,
     Height = 150,
     ScaleType = Enum.ScaleType.Crop,
     Transparency = 0,
     BackgroundTransparency = 0,
 })
+DetailsBox:AddLabel("Current place thumbnail")
+DetailsBox:AddLabel("Images accept Roblox CDN and HTTPS URLs.")
+DetailsBox:AddLabel("The panel appears only when UserPanelBox is defined.")
 
-GameDetailsBox:AddLabel("Steal An Egg")
-GameDetailsBox:AddLabel("Game details and information")
-GameDetailsBox:AddLabel("Status: First Release V1")
-
--- Direct image URLs are supported by the current AddImage implementation.
--- Replace this URL with a Roblox CDN, HTTPS CDN, PNG, JPEG, or GIF URL.
-GameDetailsBox:AddImage("ExternalImage", {
+local ExternalImageBox = InfoTab:AddRightGroupbox("Image URL Support", "image", true, true, false)
+ExternalImageBox:AddImage("ExternalCdnImage", {
     Image = "https://tr.rbxcdn.com/180DAY-79e666901b2c722b06310d267bc6c152/768/432/Image/Webp/noFilter",
     Height = 120,
     ScaleType = Enum.ScaleType.Crop,
     Transparency = 0,
     BackgroundTransparency = 0,
 })
+ExternalImageBox:AddLabel("This groupbox starts collapsed.")
+ExternalImageBox:AddLabel("Use direct HTTPS PNG, JPEG, GIF, or Roblox CDN links.")
 
-local ChangelogRightBox = InfoTab:AddRightGroupbox(
-    "Library Features",
-    "sparkles",
-    true,
-    true,
-    false
-)
+--// COMPONENTS TAB ---------------------------------------------------------
 
-ChangelogRightBox:AddLabel("Click any groupbox title or arrow to collapse it.")
-ChangelogRightBox:AddLabel("The groupbox starts collapsed in this example.")
+local ToggleBox = ComponentsTab:AddLeftGroupbox("Toggles and Addons", "toggle-left", true, false, false)
+ToggleBox:AddDivider("Toggle")
 
---[[ COMPONENTS TAB ]]
-
-local ToggleBox = ComponentsTab:AddLeftGroupbox(
-    "Toggles",
-    "toggle-left",
-    true,
-    false,
-    false
-)
-
-local FeatureToggle = ToggleBox:AddToggle("ExampleToggle", {
+local DemoToggle = ToggleBox:AddToggle("DemoToggle", {
     Text = "Example Toggle",
     Default = false,
     Callback = function(Value)
@@ -196,43 +230,50 @@ local FeatureToggle = ToggleBox:AddToggle("ExampleToggle", {
     end,
 })
 
-ToggleBox:AddToggle("SecondToggle", {
-    Text = "Second Toggle",
+-- Correct color picker usage: call it on the parent toggle.
+DemoToggle:AddColorPicker("DemoToggleColor", {
+    Default = Color3.fromRGB(125, 85, 255),
+    Title = "Toggle color",
+    Callback = function(Color)
+        print("Toggle color:", Color)
+    end,
+})
+
+local DemoKeyToggle = ToggleBox:AddToggle("DemoKeyToggle", {
+    Text = "Toggle with KeyPicker",
+    Default = true,
+})
+DemoKeyToggle:AddKeyPicker("DemoKeyPicker", {
+    Text = "Activation key",
+    Default = "RightShift",
+    Mode = "Toggle",
+    SyncToggleState = true,
+})
+
+ToggleBox:AddCheckbox("DemoCheckbox", {
+    Text = "Example Checkbox",
     Default = true,
 })
 
-local ControlsBox = ComponentsTab:AddRightGroupbox(
-    "Controls",
-    "sliders-horizontal",
-    true,
-    false,
-    false
-)
+ToggleBox:AddLabel("ColorPicker is an addon on the toggle, not a groupbox method.")
 
-ControlsBox:AddSlider("ExampleSlider", {
+local ControlsBox = ComponentsTab:AddRightGroupbox("Basic Controls", "sliders-horizontal", true, false, false)
+ControlsBox:AddDivider("Numeric and text controls")
+
+local DemoSlider = ControlsBox:AddSlider("DemoSlider", {
     Text = "Animation Speed",
     Default = 50,
     Min = 1,
     Max = 100,
     Rounding = 0,
-    Compact = false,
+    Suffix = "%",
     Callback = function(Value)
         print("Animation speed:", Value)
     end,
 })
 
-ControlsBox:AddDropdown("ExampleDropdown", {
-    Values = { "First", "Second", "Third" },
-    Default = 1,
-    Multi = false,
-    Text = "Example Dropdown",
-    Callback = function(Value)
-        print("Dropdown value:", Value)
-    end,
-})
-
-ControlsBox:AddInput("ExampleInput", {
-    Default = "",
+local DemoInput = ControlsBox:AddInput("DemoInput", {
+    Default = "Nnd",
     Numeric = false,
     Finished = false,
     Text = "Example Input",
@@ -242,57 +283,31 @@ ControlsBox:AddInput("ExampleInput", {
     end,
 })
 
-ControlsBox:AddLabel("Normal label component")
-
--- AddTabbox1 places a tabbox inside this groupbox using a shorter API.
-local ModesTabbox = ControlsBox:AddTabbox1({
-    Name = "Modes",
+local DemoSingleDropdown = ControlsBox:AddDropdown("DemoSingleDropdown", {
+    Values = { "First", "Second", "Third", "Fourth" },
+    Default = 1,
+    Multi = false,
+    Text = "Single Dropdown",
+    Callback = function(Value)
+        print("Single dropdown:", Value)
+    end,
 })
 
-local BasicModeTab = ModesTabbox:AddTab("Basic", "circle")
-BasicModeTab:AddLabel("Basic mode content")
-BasicModeTab:AddToggle("BasicModeToggle", {
-    Text = "Enable Basic Mode",
-    Default = false,
+local DemoMultiDropdown = ControlsBox:AddDropdown("DemoMultiDropdown", {
+    Values = { "Alpha", "Beta", "Gamma", "Delta" },
+    Default = { Alpha = true, Gamma = true },
+    Multi = true,
+    Text = "Multi Dropdown",
+    SelectAllButtons = true,
+    Callback = function(Value)
+        print("Multi dropdown:", Value)
+    end,
 })
 
-local AdvancedModeTab = ModesTabbox:AddTab("Advanced", "settings")
-AdvancedModeTab:AddLabel("Advanced mode content")
-AdvancedModeTab:AddSlider("AdvancedPower", {
-    Text = "Power",
-    Default = 25,
-    Min = 1,
-    Max = 100,
-    Rounding = 0,
-})
+ControlsBox:AddLabel("Dropdown supports single and Multi = true selection modes.")
 
-local ImageBox = ComponentsTab:AddLeftGroupbox(
-    "Images",
-    "image",
-    true,
-    true,
-    false
-)
-
-ImageBox:AddImage("RobloxCDNExample", {
-    Image = "https://tr.rbxcdn.com/180DAY-79e666901b2c722b06310d267bc6c152/768/432/Image/Webp/noFilter",
-    Height = 140,
-    ScaleType = Enum.ScaleType.Crop,
-    Transparency = 0,
-    BackgroundTransparency = 0,
-})
-
-ImageBox:AddLabel("This groupbox starts collapsed.")
-
-local ActionsBox = ComponentsTab:AddRightGroupbox(
-    "Actions",
-    "mouse-pointer-click",
-    true,
-    false,
-    false
-)
-
-ActionsBox:AddButton({
+local ButtonBox = ComponentsTab:AddLeftGroupbox("Buttons", "mouse-pointer-click", true, false, false)
+ButtonBox:AddButton({
     Text = "Normal Button",
     Func = function()
         Library:Notify({
@@ -303,46 +318,393 @@ ActionsBox:AddButton({
     end,
 })
 
--- HoldButton fills its progress bar while the button is held.
-ActionsBox:AddHoldButton("HoldToNotify", {
-    Text = "Hold for Notification",
+ButtonBox:AddHoldButton("DemoHoldButton", {
+    Text = "Hold Button",
     HoldTime = 1.25,
     Func = function()
         Library:Notify({
-            Title = "HoldButton Complete",
-            Description = "The button was held long enough.",
+            Title = "Hold Complete",
+            Description = "The button was held for the required duration.",
             Duration = 3,
         })
     end,
 })
 
-ActionsBox:AddButton({
-    Text = "Toggle Minimized Window",
+ButtonBox:AddButton({
+    Text = "Send Test Notification",
     Func = function()
-        Window:ToggleMinimized()
+        Library:Notify({
+            Title = "Component Gallery",
+            Description = "This notification is also recorded in Notification History.",
+            Duration = 3,
+        })
     end,
 })
 
---[[ SETTINGS TAB ]]
+local NestedBox = ComponentsTab:AddRightGroupbox("Nested Tabs", "folder-tree", true, false, false)
+NestedBox:AddLabel("AddTabbox1 is the short nested-tab API.")
+local NestedTabs = NestedBox:AddTabbox1({ Name = "Demo Modes", Side = 1 })
 
-local SettingsBox = SettingsTab:AddLeftGroupbox(
-    "Settings",
-    "settings-2",
-    true,
-    false,
-    false
-)
+local BasicTab = NestedTabs:AddTab("Basic", "circle")
+BasicTab:AddLabel("Basic nested tab content")
+BasicTab:AddToggle("NestedBasicToggle", {
+    Text = "Nested Toggle",
+    Default = false,
+})
 
-SettingsBox:AddToggle("BlurToggle", {
-    Text = "Background Blur",
+local AdvancedNestedTab = NestedTabs:AddTab("Advanced", "settings")
+AdvancedNestedTab:AddLabel("Advanced nested tab content")
+AdvancedNestedTab:AddSlider("NestedSlider", {
+    Text = "Nested Power",
+    Default = 25,
+    Min = 1,
+    Max = 100,
+    Rounding = 0,
+})
+
+-- Demonstrate the longer official tabbox API as well.
+local OfficialTabbox = ComponentsTab:AddRightTabbox("Official API")
+local OfficialTab = OfficialTabbox:AddTab("Tab", "layers")
+OfficialTab:AddLabel("This tabbox uses AddRightTabbox.")
+OfficialTab:AddButton({
+    Text = "Tabbox Button",
+    Func = function()
+        print("Official tabbox button pressed")
+    end,
+})
+
+--// ADVANCED TAB -----------------------------------------------------------
+
+local AdvancedLeft = AdvancedTab:AddLeftGroupbox("Dependencies", "git-branch", true, false, false)
+local DependencyToggle = AdvancedLeft:AddToggle("DependencyToggle", {
+    Text = "Show dependent controls",
+    Default = false,
+})
+
+local DependencyBox = AdvancedLeft:AddDependencyBox()
+DependencyBox:AddLabel("This box is visible only when the toggle is enabled.")
+DependencyBox:AddSlider("DependentSlider", {
+    Text = "Dependent Value",
+    Default = 40,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+})
+DependencyBox:SetupDependencies({
+    { DependencyToggle, true },
+})
+
+local DependencyGroup = AdvancedLeft:AddDependencyGroupbox()
+DependencyGroup:AddLabel("This is a dependency groupbox.")
+DependencyGroup:AddToggle("NestedDependencyToggle", {
+    Text = "Nested dependent toggle",
+    Default = true,
+})
+DependencyGroup:SetupDependencies({
+    { DependencyToggle, true },
+})
+
+local AdvancedRight = AdvancedTab:AddRightGroupbox("Media and Instances", "boxes", true, false, false)
+AdvancedRight:AddImage("AdvancedImage", {
+    Image = "https://tr.rbxcdn.com/180DAY-79e666901b2c722b06310d267bc6c152/768/432/Image/Webp/noFilter",
+    Height = 105,
+    ScaleType = Enum.ScaleType.Crop,
+    Transparency = 0,
+    BackgroundTransparency = 0,
+})
+
+-- A blank video is intentional: replace it with a valid Roblox video asset id.
+AdvancedRight:AddVideo("DemoVideo", {
+    Video = "",
+    Looped = false,
+    Playing = false,
+    Volume = 1,
+    Height = 110,
+})
+AdvancedRight:AddLabel("Video is ready for a valid Roblox video asset id.")
+
+local DemoModel = Instance.new("Model")
+DemoModel.Name = "NndDemoViewportModel"
+local DemoCore = Instance.new("Part")
+DemoCore.Name = "Core"
+DemoCore.Anchored = true
+DemoCore.Size = Vector3.new(4, 2, 4)
+DemoCore.Color = Color3.fromRGB(125, 85, 255)
+DemoCore.Parent = DemoModel
+local DemoTop = Instance.new("Part")
+DemoTop.Name = "Top"
+DemoTop.Anchored = true
+DemoTop.Size = Vector3.new(2, 1, 2)
+DemoTop.Position = Vector3.new(0, 1.5, 0)
+DemoTop.Color = Color3.fromRGB(80, 155, 255)
+DemoTop.Parent = DemoModel
+
+AdvancedRight:AddViewport("DemoViewport", {
+    Object = DemoModel,
+    Clone = true,
+    AutoFocus = true,
+    Interactive = true,
+    Height = 180,
+})
+
+local PassthroughLabel = Instance.new("TextLabel")
+PassthroughLabel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+PassthroughLabel.BackgroundTransparency = 0
+PassthroughLabel.BorderSizePixel = 0
+PassthroughLabel.Size = UDim2.new(1, 0, 1, 0)
+PassthroughLabel.Font = Enum.Font.Code
+PassthroughLabel.Text = "UI Passthrough instance"
+PassthroughLabel.TextColor3 = Color3.new(1, 1, 1)
+PassthroughLabel.TextSize = 14
+AdvancedRight:AddUIPassthrough("DemoPassthrough", {
+    Instance = PassthroughLabel,
+    Height = 34,
+})
+
+-- Subtabs are useful when a tab has several related views.
+local SubTabA = AdvancedTab:AddSubTab({ Name = "Overview", Icon = "list" })
+local SubTabB = AdvancedTab:AddSubTab({ Name = "Notes", Icon = "notebook-pen" })
+SubTabA:AddLabel("Overview subtab is active by default.")
+SubTabA:AddDivider("Subtab API")
+SubTabB:AddLabel("This is a second tab created with AddSubTab.")
+
+--// THEME TAB --------------------------------------------------------------
+
+local ThemeBox = ThemeTab:AddLeftGroupbox("Theme Presets", "palette", true, false, false)
+local ThemeDropdown = ThemeBox:AddDropdown("ThemePreset", {
+    Values = { "Midnight", "Ocean", "Forest", "Paper" },
+    Default = 1,
+    Multi = false,
+    Text = "Theme preset",
+    Callback = function(Name)
+        ApplyTheme(Name)
+        Library:Notify({
+            Title = "Theme Applied",
+            Description = Name .. " colors are now active.",
+            Duration = 2,
+        })
+    end,
+})
+
+local LightThemeToggle = ThemeBox:AddToggle("LightThemeToggle", {
+    Text = "Light theme shading",
+    Default = false,
+    Callback = function(Value)
+        Library.IsLightTheme = Value
+        Library:UpdateColorsUsingRegistry()
+    end,
+})
+
+local AccentToggle = ThemeBox:AddToggle("AccentPreviewToggle", {
+    Text = "Accent preview control",
+    Default = true,
+})
+
+-- Correct method: AddColorPicker belongs to the parent toggle.
+AccentToggle:AddColorPicker("AccentColorPicker", {
+    Default = Library.Scheme.AccentColor,
+    Title = "Accent color",
+    Transparency = 0,
+    Callback = function(Color)
+        Library.Scheme.AccentColor = Color
+        Library:UpdateColorsUsingRegistry()
+    end,
+})
+
+local AccentColorPicker = Library.Options["AccentColorPicker"]
+
+local FontBox = ThemeTab:AddRightGroupbox("Window Appearance", "sliders-horizontal", true, false, false)
+local CornerRadiusSlider = FontBox:AddSlider("CornerRadius", {
+    Text = "Corner radius",
+    Default = 10,
+    Min = 0,
+    Max = 20,
+    Rounding = 0,
+    Callback = function(Value)
+        Window:SetCornerRadius(Value)
+    end,
+})
+
+local WindowGlowToggle = FontBox:AddToggle("WindowGlow", {
+    Text = "Window glow",
     Default = true,
     Callback = function(Value)
-        print("Background blur setting:", Value)
+        Window:SetGlow(Value)
     end,
 })
 
-SettingsBox:AddToggle("AnimationToggle", {
-    Text = "Window Animations",
+local BackgroundImageInput = FontBox:AddInput("BackgroundImageInput", {
+    Default = "",
+    Text = "Background image URL",
+    Placeholder = "Optional HTTPS or Roblox CDN URL",
+    Callback = function(Value)
+        if Value ~= "" then
+            Window:SetBackgroundImage(Value)
+        end
+    end,
+})
+
+FontBox:AddButton({
+    Text = "Clear background image",
+    Func = function()
+        BackgroundImageInput:SetValue("")
+        Window:SetBackgroundImage("")
+    end,
+})
+FontBox:AddLabel("Theme presets update Library.Scheme and refresh the registry.")
+
+--// CONFIG TAB -------------------------------------------------------------
+
+local ConfigStore = {}
+local ConfigName = "Default"
+
+local ConfigBox = ConfigTab:AddLeftGroupbox("Config Profiles", "folder-cog", true, false, false)
+local ConfigProfileDropdown = ConfigBox:AddDropdown("ConfigProfile", {
+    Values = { "Default", "Ocean Profile", "Paper Profile" },
+    Default = 1,
+    Multi = false,
+    Text = "Profile",
+    Callback = function(Value)
+        ConfigName = Value or "Default"
+    end,
+})
+
+local ConfigStatus = ConfigBox:AddLabel("No profile saved in this session.")
+
+local function ColorToArray(Color)
+    return { Color.R, Color.G, Color.B }
+end
+
+local function ArrayToColor(Value, Fallback)
+    if typeof(Value) == "table" and #Value == 3 then
+        return Color3.new(Value[1], Value[2], Value[3])
+    end
+    return Fallback
+end
+
+local function SnapshotConfig()
+    local MultiValue = {}
+    for Name, Enabled in pairs(DemoMultiDropdown.Value or {}) do
+        MultiValue[Name] = Enabled
+    end
+
+    return {
+        Theme = ThemeDropdown.Value,
+        LightTheme = LightThemeToggle.Value,
+        Accent = ColorToArray(Library.Scheme.AccentColor),
+        Slider = DemoSlider.Value,
+        Input = DemoInput.Value,
+        Single = DemoSingleDropdown.Value,
+        Multi = MultiValue,
+        CornerRadius = CornerRadiusSlider.Value,
+        Glow = WindowGlowToggle.Value,
+        BackgroundImage = BackgroundImageInput.Value,
+    }
+end
+
+local function RestoreConfig(Data)
+    if not Data then
+        return false
+    end
+
+    if Data.Theme then
+        ThemeDropdown:SetValue(Data.Theme)
+    end
+    if Data.LightTheme ~= nil then
+        LightThemeToggle:SetValue(Data.LightTheme)
+    end
+    if Data.Accent then
+        AccentColorPicker:SetValueRGB(ArrayToColor(Data.Accent, Library.Scheme.AccentColor))
+    end
+    if Data.Slider then
+        DemoSlider:SetValue(Data.Slider)
+    end
+    if Data.Input ~= nil then
+        DemoInput:SetValue(Data.Input)
+    end
+    if Data.Single then
+        DemoSingleDropdown:SetValue(Data.Single)
+    end
+    if Data.Multi then
+        DemoMultiDropdown:SetValue(Data.Multi)
+    end
+    if Data.CornerRadius then
+        CornerRadiusSlider:SetValue(Data.CornerRadius)
+    end
+    if Data.Glow ~= nil then
+        WindowGlowToggle:SetValue(Data.Glow)
+    end
+    if Data.BackgroundImage ~= nil then
+        BackgroundImageInput:SetValue(Data.BackgroundImage)
+        Window:SetBackgroundImage(Data.BackgroundImage)
+    end
+
+    return true
+end
+
+ConfigBox:AddButton({
+    Text = "Save current profile",
+    Func = function()
+        ConfigStore[ConfigName] = SnapshotConfig()
+        ConfigStatus:SetText("Saved profile: " .. ConfigName)
+        Library:Notify({
+            Title = "Config Saved",
+            Description = ConfigName .. " is stored for this session.",
+            Duration = 2,
+        })
+    end,
+})
+
+ConfigBox:AddButton({
+    Text = "Load selected profile",
+    Func = function()
+        if RestoreConfig(ConfigStore[ConfigName]) then
+            ConfigStatus:SetText("Loaded profile: " .. ConfigName)
+            Library:Notify({
+                Title = "Config Loaded",
+                Description = ConfigName .. " has been restored.",
+                Duration = 2,
+            })
+        else
+            ConfigStatus:SetText("Nothing saved for: " .. ConfigName)
+        end
+    end,
+})
+
+ConfigBox:AddButton({
+    Text = "Reset demo config",
+    Func = function()
+        ApplyTheme("Midnight")
+        ThemeDropdown:SetValue("Midnight")
+        LightThemeToggle:SetValue(false)
+        AccentColorPicker:SetValueRGB(ThemePresets.Midnight.AccentColor)
+        DemoSlider:SetValue(50)
+        DemoInput:SetValue("Nnd")
+        DemoSingleDropdown:SetValue("First")
+        DemoMultiDropdown:SetValue({ Alpha = true, Gamma = true })
+        CornerRadiusSlider:SetValue(10)
+        WindowGlowToggle:SetValue(true)
+        BackgroundImageInput:SetValue("")
+        Window:SetBackgroundImage("")
+        ConfigStatus:SetText("Demo config reset.")
+    end,
+})
+
+ConfigBox:AddLabel("This example uses an in-memory session config store.")
+ConfigBox:AddLabel("Connect these snapshots to your preferred persistence layer if needed.")
+
+local ConfigRight = ConfigTab:AddRightGroupbox("Config Contents", "list-checks", true, false, false)
+ConfigRight:AddLabel("Saved values include theme, accent color, sliders, dropdowns, input, radius, glow, and background image.")
+ConfigRight:AddLabel("Multi dropdown values are stored as a name-to-boolean map.")
+ConfigRight:AddLabel("Library.Options exposes controls by their ids.")
+ConfigRight:AddDivider("Theme values")
+ConfigRight:AddLabel("Midnight, Ocean, Forest, and Paper presets are included.")
+
+--// LIFECYCLE TAB ----------------------------------------------------------
+
+local AnimationBox = LifecycleTab:AddLeftGroupbox("Animations", "sparkles", true, false, false)
+local AnimationToggle = AnimationBox:AddToggle("AnimationsEnabled", {
+    Text = "Window and component animations",
     Default = true,
     Callback = function(Value)
         Window:SetAnimations({
@@ -355,38 +717,38 @@ SettingsBox:AddToggle("AnimationToggle", {
     end,
 })
 
-local KeybindLabel = SettingsBox:AddLabel("Window Keybind")
-
-KeybindLabel:AddKeyPicker("WindowKeybind", {
-    Text = "Toggle Window",
-    Default = "RightControl",
-    Mode = "Toggle",
-    Callback = function()
-        print("RightControl pressed")
+AnimationBox:AddButton({
+    Text = "Toggle minimized card",
+    Func = function()
+        Window:ToggleMinimized()
+    end,
+})
+AnimationBox:AddButton({
+    Text = "Minimize window",
+    Func = function()
+        Window:SetMinimized(true)
+    end,
+})
+AnimationBox:AddButton({
+    Text = "Restore window",
+    Func = function()
+        Window:SetMinimized(false)
     end,
 })
 
-local NotificationsBox = SettingsTab:AddRightGroupbox(
-    "Notifications",
-    "bell",
-    true,
-    false,
-    false
-)
-
-NotificationsBox:AddButton({
-    Text = "Send Test Notification",
+local NotificationBox = LifecycleTab:AddRightGroupbox("Notifications", "bell", true, false, false)
+NotificationBox:AddButton({
+    Text = "Send test notification",
     Func = function()
         Library:Notify({
-            Title = "Test Notification",
-            Description = "This notification is added to Notification History.",
+            Title = "Nnd Notification",
+            Description = "Notification History records this message.",
             Duration = 4,
         })
     end,
 })
-
-NotificationsBox:AddButton({
-    Text = "Clear Notification History",
+NotificationBox:AddButton({
+    Text = "Clear notification history",
     Func = function()
         Library:ClearNotificationHistory()
         Library:Notify({
@@ -396,43 +758,31 @@ NotificationsBox:AddButton({
         })
     end,
 })
+NotificationBox:AddLabel("Use the bell icon in the header for notification history.")
+NotificationBox:AddLabel("Use the features icon in the header for enabled toggles.")
 
-NotificationsBox:AddLabel("Use the bell in the window header to open history.")
-NotificationsBox:AddLabel("Use the sliders/features icon to view enabled features.")
-
-local LifecycleBox = SettingsTab:AddLeftGroupbox(
-    "Window Lifecycle",
-    "power",
-    true,
-    false,
-    false
-)
-
-LifecycleBox:AddButton({
-    Text = "Minimize Window",
-    Func = function()
-        Window:SetMinimized(true)
-    end,
-})
-
-LifecycleBox:AddButton({
-    Text = "Restore Window",
-    Func = function()
-        Window:SetMinimized(false)
-    end,
-})
-
-LifecycleBox:AddButton({
+local UnloadBox = LifecycleTab:AddLeftGroupbox("Unload and Cleanup", "trash-2", true, false, false)
+UnloadBox:AddLabel("The trash button in the header also calls Library:Unload().")
+UnloadBox:AddButton({
     Text = "Unload Library",
     Func = function()
         Library:Unload()
     end,
 })
 
+-- Keep local demo objects out of Workspace and clean them on unload.
+Library:OnUnload(function()
+    if DemoModel then
+        DemoModel:Destroy()
+        DemoModel = nil
+    end
+end)
+
 Window:SelectTab(InfoTab)
+ApplyTheme("Midnight")
 
 Library:Notify({
-    Title = "Nnd Example Loaded",
-    Description = "UserPanel, glow, popups, nested tabbox, animations, hold button, notifications, and collapsible groupboxes are ready.",
+    Title = "Nnd Component Gallery Loaded",
+    Description = "Explore the full normal component example, including color picker, themes, config, and multi dropdown.",
     Duration = 4,
 })
