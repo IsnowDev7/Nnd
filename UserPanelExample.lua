@@ -179,12 +179,6 @@ local FeatureToggle = ToggleBox:AddToggle("ExampleToggle", {
     end,
 })
 
--- ColorPicker is a groupbox component in the current library.
-ToggleBox:AddColorPicker("ExampleToggleColor", {
-    Default = Color3.fromRGB(80, 150, 255),
-    Title = "Toggle Color",
-})
-
 ToggleBox:AddToggle("SecondToggle", {
     Text = "Second Toggle",
     Default = true,
