@@ -5,20 +5,20 @@ local ThemeManager = loadstring(game:HttpGet(managerRepo .. "ThemeManager.lua"))
 local SaveManager = loadstring(game:HttpGet(managerRepo .. "SaveManager.lua"))()
 
 ThemeManager:SetLibrary(Library)
-ThemeManager:SetFolder("NndDemo")
+ThemeManager:SetFolder("ComponentGalleryThemes")
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-SaveManager:SetFolder("NndDemo/ComponentGallery")
+SaveManager:SetFolder("ComponentGallery/Showcase")
 SaveManager:SetSubFolder("Showcase")
 
 
 local Window = Library:CreateWindow({
-    Title = "Nnd UI Component Gallery",
+    Title = "UI Component Gallery",
     SubTitle = "Normal Obsidian-style usage",
     InitialTab = "Info",
     Footer = {
-        { Text = "Nnd Demo", Copyable = true, CopyText = "Nnd UI Component Gallery" },
+        { Text = "Component Demo", Copyable = true, CopyText = "UI Component Gallery" },
         { Text = "RightControl", Copyable = true, CopyText = "RightControl" },
     },
     CopyableFooter = true,
@@ -51,7 +51,7 @@ local Window = Library:CreateWindow({
 
     Popups = {
         {
-            Title = "Welcome to the Nnd gallery",
+            Title = "Welcome to the component gallery",
             Description = "This is a normal component demo. It contains no gameplay automation or game-specific logic.",
             ButtonText = "Continue",
         },
@@ -193,7 +193,7 @@ local DemoSlider = ControlsBox:AddSlider("DemoSlider", {
 })
 
 local DemoInput = ControlsBox:AddInput("DemoInput", {
-    Default = "Nnd",
+    Default = "Example",
     Numeric = false,
     Finished = false,
     Text = "Example Input",
@@ -341,7 +341,7 @@ AdvancedRight:AddVideo("DemoVideo", {
 AdvancedRight:AddLabel("Video is ready for a valid Roblox video asset id.")
 
 local DemoModel = Instance.new("Model")
-DemoModel.Name = "NndDemoViewportModel"
+DemoModel.Name = "ComponentDemoViewportModel"
 local DemoCore = Instance.new("Part")
 DemoCore.Name = "Core"
 DemoCore.Anchored = true
@@ -446,7 +446,7 @@ AppearanceBox:AddButton({
 local ManagerNotes = UISettingsTab:AddRightGroupbox("Manager Usage", "book-open", true, false, false)
 ManagerNotes:AddLabel("ThemeManager creates the theme controls in this tab.")
 ManagerNotes:AddLabel("SaveManager creates the configuration controls in this tab.")
-ManagerNotes:AddLabel("Autoload uses the configured NndDemo folder.")
+ManagerNotes:AddLabel("Autoload uses the configured component folder.")
 ManagerNotes:AddLabel("The accent color picker remains a normal toggle addon.")
 
 
@@ -492,12 +492,12 @@ PasswordBox:AddButton({
         Window:AddPasswordDialog("DemoPasswordDialog", {
             Title = "Demo Password",
             Description = "Enter the password to view the normal dialog flow.",
-            Password = "NndDemo",
+            Password = "DemoPass",
             InputLabel = "Password",
-            Placeholder = "Try NndDemo",
+            Placeholder = "Try DemoPass",
             Remember = true,
             RememberText = "Remember this demo password",
-            ErrorText = "The demo password is NndDemo.",
+            ErrorText = "The demo password is DemoPass.",
             Callback = function(_, Remember)
                 Library:Notify({
                     Title = "Password Accepted",
@@ -514,7 +514,7 @@ NotificationBox:AddButton({
     Text = "Send test notification",
     Func = function()
         Library:Notify({
-            Title = "Nnd Notification",
+            Title = "Component Notification",
             Description = "Notification History records this message.",
             Duration = 4,
         })
@@ -540,7 +540,7 @@ FooterBox:AddButton({
     Text = "Set copyable footer",
     Func = function()
         Window:SetFooter({
-            { Text = "Nnd Demo", Copyable = true, CopyText = "Nnd UI Component Gallery" },
+            { Text = "Component Demo", Copyable = true, CopyText = "UI Component Gallery" },
             { Text = "RightControl", Copyable = true, CopyText = "RightControl" },
         })
         Library:Notify({
@@ -571,7 +571,7 @@ SaveManager:LoadAutoloadConfig()
 Window:SelectTab("Info")
 
 Library:Notify({
-    Title = "Nnd Component Gallery Loaded",
+    Title = "Component Gallery Loaded",
     Description = "Explore the full normal component example, including color picker, themes, config, and multi dropdown.",
     Duration = 4,
 })
