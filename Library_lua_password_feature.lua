@@ -299,9 +299,6 @@ local Library = {
         Info = Color3.fromRGB(96, 165, 255),
     },
 
-    --// Floating toggle displays \\--
-    FloatingDisplays = {},
-
     --// Dialogues \\--
     Dialogues = {},
     ActiveDialog = nil,
@@ -577,7 +574,6 @@ local Templates = {
         Visible = true,
 
         -- Optional linked display panel shown beside the window while enabled.
-        ShowDisplay = false,
         Display = nil,
     },
     Input = {
@@ -2072,26 +2068,6 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
             table.remove(Library.Signals, IdxBegan)
         end
     end)
-end
-
-function Library:SyncFloatingDisplays()
-    for Index = #Library.FloatingDisplays, 1, -1 do
-        local Display = Library.FloatingDisplays[Index]
-        if not Display or Display.Destroyed or not Display.Frame or not Display.Frame.Parent then
-            table.remove(Library.FloatingDisplays, Index)
-        elseif Display.FollowWindow and Display.UpdatePosition then
-            Display:UpdatePosition()
-        end
-    end
-end
-
-function Library:SetFloatingDisplaysShellVisible(Visible: boolean)
-    for Index = #Library.FloatingDisplays, 1, -1 do
-        local Display = Library.FloatingDisplays[Index]
-        if Display and not Display.Destroyed and Display.SetShellVisible then
-            Display:SetShellVisible(Visible)
-        end
-    end
 end
 
 function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: () -> ()?)
@@ -5985,10 +5961,6 @@ do
             Addons = {},
             AnyKeyPickerPicking = false,
 
-            ShowDisplay = Info.ShowDisplay == true,
-            DisplayInfo = Info.Display,
-            DisplayPanel = nil,
-
             Variant = "Switch",
             Type = "Toggle",
         }
@@ -6153,263 +6125,6 @@ do
             Library:SafeCallback(Toggle.Changed, Toggle.Value)
         end
 
-        function Toggle:CreateDisplay(DisplayInfo)
-            if Toggle.DisplayPanel then
-                Toggle.DisplayPanel:Destroy()
-                Toggle.DisplayPanel = nil
-            end
-            if not Toggle.ShowDisplay then
-                return nil
-            end
-
-            if typeof(DisplayInfo) == "function" then
-                DisplayInfo = { Build = DisplayInfo }
-            elseif typeof(DisplayInfo) ~= "table" then
-                DisplayInfo = {}
-            end
-            local Main = Library.MainFrame
-            local Parent = ScreenGui
-            if not Parent then
-                return nil
-            end
-
-            local Display = {
-                Destroyed = false,
-                Visible = false,
-                ShellVisible = true,
-                FollowWindow = DisplayInfo.FollowWindow ~= false,
-                Draggable = DisplayInfo.Draggable == true,
-                Offset = typeof(DisplayInfo.Offset) == "Vector2" and DisplayInfo.Offset or Vector2.new(18, 0),
-                Toggle = Toggle,
-                Window = Window,
-            }
-            local DisplaySize = typeof(DisplayInfo.Size) == "UDim2" and DisplayInfo.Size or UDim2.fromOffset(300, 220)
-            local DisplayTitle = tostring(DisplayInfo.Title or Toggle.Text or "Display")
-            local DisplayTweenInfo = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-            local DisplayCloseTweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-
-            local Frame = New("CanvasGroup", {
-                BackgroundColor3 = DisplayInfo.BackgroundColor3 or "BackgroundColor",
-                BackgroundTransparency = typeof(DisplayInfo.BackgroundTransparency) == "number" and DisplayInfo.BackgroundTransparency or 0,
-                ClipsDescendants = true,
-                GroupTransparency = 1,
-                Name = DisplayInfo.Name or ("ToggleDisplay_" .. tostring(Idx)),
-                Position = DisplayInfo.Position or UDim2.fromOffset(0, 0),
-                Size = DisplaySize,
-                Visible = false,
-                ZIndex = DisplayInfo.ZIndex or 60,
-                Parent = Parent,
-            })
-            Display.Frame = Frame
-            Display.Root = Frame
-            Library:AddOutline(Frame)
-            table.insert(Library.Corners, New("UICorner", {
-                CornerRadius = UDim.new(0, DisplayInfo.CornerRadius or Library.CornerRadius),
-                Parent = Frame,
-            }))
-
-            local TitleBar = New("TextButton", {
-                Active = true,
-                BackgroundColor3 = DisplayInfo.TitleBarColor3 or "MainColor",
-                BackgroundTransparency = typeof(DisplayInfo.TitleBarTransparency) == "number" and DisplayInfo.TitleBarTransparency or 0,
-                Size = UDim2.new(1, 0, 0, 34),
-                Text = "",
-                ZIndex = Frame.ZIndex + 1,
-                Parent = Frame,
-            })
-            Display.TitleBar = TitleBar
-            New("UIPadding", {
-                PaddingLeft = UDim.new(0, 12),
-                PaddingRight = UDim.new(0, 8),
-                Parent = TitleBar,
-            })
-            local TitleLabel = New("TextLabel", {
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, -28, 1, 0),
-                Text = DisplayTitle,
-                TextColor3 = "FontColor",
-                TextSize = 14,
-                TextTruncate = Enum.TextTruncate.AtEnd,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = Frame.ZIndex + 2,
-                Parent = TitleBar,
-            })
-            Display.TitleLabel = TitleLabel
-
-            local CloseButton
-            if DisplayInfo.CloseButton ~= false then
-                CloseButton = New("TextButton", {
-                    AnchorPoint = Vector2.new(1, 0.5),
-                    BackgroundTransparency = 1,
-                    Position = UDim2.new(1, -8, 0.5, 0),
-                    Size = UDim2.fromOffset(20, 20),
-                    Text = "×",
-                    TextColor3 = "FontColor",
-                    TextSize = 18,
-                    TextTransparency = 0.35,
-                    ZIndex = Frame.ZIndex + 2,
-                    Parent = TitleBar,
-                })
-                CloseButton.MouseButton1Click:Connect(function()
-                    Display:SetVisible(false)
-                end)
-            end
-            Display.CloseButton = CloseButton
-
-            local Content = New("Frame", {
-                BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(0, 34),
-                Size = UDim2.new(1, 0, 1, -34),
-                ZIndex = Frame.ZIndex + 1,
-                Parent = Frame,
-            })
-            Display.Content = Content
-
-            function Display:Create(ClassName, Properties)
-                assert(typeof(ClassName) == "string", "Display:Create requires a class name")
-                Properties = typeof(Properties) == "table" and table.clone(Properties) or {}
-                if Properties.Parent == nil then
-                    Properties.Parent = Content
-                end
-                local Success, InstanceOrError = pcall(New, ClassName, Properties)
-                assert(Success, InstanceOrError)
-                return InstanceOrError
-            end
-            Display.New = Display.Create
-            Display.Add = Display.Create
-            function Display:AddFrame(Properties) return self:Create("Frame", Properties) end
-            function Display:AddScrollingFrame(Properties) return self:Create("ScrollingFrame", Properties) end
-            function Display:AddTextButton(Properties) return self:Create("TextButton", Properties) end
-            function Display:AddButton(Properties) return self:Create("TextButton", Properties) end
-            function Display:AddTextLabel(Properties) return self:Create("TextLabel", Properties) end
-            function Display:AddImageLabel(Properties) return self:Create("ImageLabel", Properties) end
-            function Display:AddImage(Properties)
-                Properties = typeof(Properties) == "table" and table.clone(Properties) or {}
-                if typeof(Properties.Image) == "string" then
-                    local Icon = Library:GetCustomIcon(Properties.Image)
-                    if Icon then
-                        Properties.Image = Icon.Url
-                        Properties.ImageRectOffset = Icon.ImageRectOffset
-                        Properties.ImageRectSize = Icon.ImageRectSize
-                    end
-                end
-                return self:Create("ImageLabel", Properties)
-            end
-            function Display:SetTitle(NewTitle)
-                DisplayTitle = tostring(NewTitle or "")
-                TitleLabel.Text = DisplayTitle
-            end
-            function Display:SetVisible(NewVisible, Immediate)
-                NewVisible = NewVisible == true
-                Display.Visible = NewVisible
-                if not Display.ShellVisible then
-                    Frame.Visible = false
-                    return
-                end
-                if Immediate then
-                    Frame.Visible = NewVisible
-                    Frame.GroupTransparency = NewVisible and 0 or 1
-                    Display:UpdatePosition()
-                    return
-                end
-                Display:UpdatePosition()
-                if NewVisible then
-                    Frame.Visible = true
-                    Frame.GroupTransparency = 1
-                    local StartPosition = Frame.Position + UDim2.fromOffset(10, 0)
-                    Frame.Position = StartPosition
-                    TweenService:Create(Frame, DisplayTweenInfo, {
-                        GroupTransparency = 0,
-                        Position = Display.RestPosition,
-                    }):Play()
-                else
-                    local EndPosition = Display.RestPosition + UDim2.fromOffset(10, 0)
-                    local Tween = TweenService:Create(Frame, DisplayCloseTweenInfo, {
-                        GroupTransparency = 1,
-                        Position = EndPosition,
-                    })
-                    Tween.Completed:Once(function()
-                        if not Display.Visible and Frame.Parent then
-                            Frame.Visible = false
-                        end
-                    end)
-                    Tween:Play()
-                end
-            end
-            function Display:SetShellVisible(NewVisible)
-                Display.ShellVisible = NewVisible == true
-                if not Display.ShellVisible then
-                    Frame.Visible = false
-                    return
-                end
-                if Display.Visible then
-                    Display:SetVisible(true, true)
-                end
-            end
-            function Display:UpdatePosition()
-                if Display.Destroyed then return end
-                if Display.FollowWindow and Main and Main.Parent then
-                    local MainPosition = Main.Position
-                    local MainWidth = Main.AbsoluteSize.X / math.max(Library.DPIScale or 1, 0.01)
-                    Display.RestPosition = UDim2.new(
-                        MainPosition.X.Scale,
-                        MainPosition.X.Offset + MainWidth + Display.Offset.X,
-                        MainPosition.Y.Scale,
-                        MainPosition.Y.Offset + Display.Offset.Y
-                    )
-                    if not Frame.Visible or not Display.Visible then
-                        Frame.Position = Display.RestPosition
-                    end
-                else
-                    Display.RestPosition = DisplayInfo.Position or Frame.Position
-                end
-            end
-            function Display:Destroy()
-                if Display.Destroyed then return end
-                Display.Destroyed = true
-                if Frame then Frame:Destroy() end
-                local Position = table.find(Library.FloatingDisplays, Display)
-                if Position then table.remove(Library.FloatingDisplays, Position) end
-                if Toggle.DisplayPanel == Display then
-                    Toggle.DisplayPanel = nil
-                end
-            end
-
-            local Build = DisplayInfo.Build or DisplayInfo.Content
-            if typeof(Build) == "function" then
-                Library:SafeCallback(Build, Display)
-            end
-            if typeof(DisplayInfo.Children) == "table" then
-                for _, Child in ipairs(DisplayInfo.Children) do
-                    if typeof(Child) == "table" then
-                        local Properties = Child.Properties or table.clone(Child)
-                        Properties.ClassName = nil
-                        local ClassName = Child.ClassName or "Frame"
-                        Display:Create(ClassName, Properties)
-                    end
-                end
-            end
-
-            if Display.Draggable then
-                Display.FollowWindow = false
-                Library:MakeDraggable(Frame, TitleBar, true)
-            end
-            table.insert(Library.FloatingDisplays, Display)
-            Display:UpdatePosition()
-            Display:SetVisible(Toggle.Value == true, true)
-            Toggle.DisplayPanel = Display
-            return Display
-        end
-
-        function Toggle:UpdateDisplay()
-            if not Toggle.ShowDisplay then
-                return
-            end
-            if Toggle.DisplayPanel then
-                Toggle.DisplayPanel:SetVisible(Toggle.Value == true)
-            end
-        end
-
         function Toggle:SetValue(Value)
             if Toggle.Disabled then
                 return
@@ -6430,7 +6145,6 @@ do
             if not Toggle.AnyKeyPickerPicking then
                 Toggle:RunChanged()
             end
-            Toggle:UpdateDisplay()
         end
 
         function Toggle:SetDisabled(Disabled: boolean)
@@ -6492,15 +6206,8 @@ do
 
         Toggle.Default = Toggle.Value
         Toggles[Idx] = Toggle
-        if Toggle.ShowDisplay then
-            Toggle:CreateDisplay(Toggle.DisplayInfo)
-        end
         function Toggle:Destroy()
             Toggle.Destroyed = true
-            if Toggle.DisplayPanel then
-                Toggle.DisplayPanel:Destroy()
-            end
-
             if Toggle.Connections then
                 for _, Connection in Toggle.Connections do
                     Connection:Disconnect()
@@ -11641,7 +11348,6 @@ function Library:CreateWindow(WindowInfo)
         })
         Library:MakeDraggable(MainFrame, TopBar, false, true)
         Library:GiveSignal(MainFrame:GetPropertyChangedSignal("Position"):Connect(function()
-            Library:SyncFloatingDisplays()
         end))
 
         --// Title \\--
@@ -12955,68 +12661,107 @@ function Library:CreateWindow(WindowInfo)
         local MotionToken = MinimizeMotionToken
         Minimized = Value
 
+        local IsWindowVisible = Library.Toggled == true
+        local MotionInfo = TweenInfo.new(0.30, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+        local MiniInfo = TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+        local function IsCurrent(ExpectedMinimized: boolean)
+            return MotionToken == MinimizeMotionToken and Minimized == ExpectedMinimized and not Library.Unloaded
+        end
+
         if Minimized then
-            -- Keep the pill anchored to the exact location of the full window.
+            -- The minimized card is deliberately hidden until the full window has
+            -- completed its shrink. This keeps the two shells from being visible
+            -- at the same time or making the pill appear early.
             MiniFrame.Position = MainFrame.Position
             MiniFrame.AnchorPoint = MainFrame.AnchorPoint
-            MiniFrame.Visible = Library.Toggled
-            if MainWindowScale then MainWindowScale.Scale = 1 end
-            if MiniWindowScale then MiniWindowScale.Scale = 0.78 end
+            MiniFrame.Visible = false
+            MainFrame.Visible = IsWindowVisible
 
-            Library:SetFloatingDisplaysShellVisible(false)
-            local MainTween = MainWindowScale and TweenService:Create(
-                MainWindowScale,
-                TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-                { Scale = 0.92 }
-            )
-            local MiniTween = MiniWindowScale and TweenService:Create(
-                MiniWindowScale,
-                TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-                { Scale = 1 }
-            )
-            MainFrame.Visible = Library.Toggled
-            if MainTween then MainTween:Play() end
-            task.delay(0.08, function()
-                if MotionToken ~= MinimizeMotionToken or not Minimized then return end
-                if MiniTween then MiniTween:Play() end
-            end)
-            task.delay(0.22, function()
-                if MotionToken ~= MinimizeMotionToken or not Minimized then return end
+            if MainWindowScale then
+                MainWindowScale.Scale = 1
+            end
+            if MiniWindowScale then
+                MiniWindowScale.Scale = 0.78
+            end
+
+            if not IsWindowVisible then
+                return
+            end
+
+            local MainTween = MainWindowScale and TweenService:Create(MainWindowScale, MotionInfo, {
+                Scale = 0.78,
+            })
+            if not MainTween then
                 MainFrame.Visible = false
-                MiniFrame.Visible = Library.Toggled
-                Library:SyncFloatingDisplays()
+                MiniFrame.Visible = true
+                if MiniWindowScale then
+                    MiniWindowScale.Scale = 1
+                end
+                return
+            end
+
+            local MainCompleted
+            MainCompleted = MainTween.Completed:Connect(function()
+                if MainCompleted then
+                    MainCompleted:Disconnect()
+                    MainCompleted = nil
+                end
+
+                if not IsCurrent(true) then
+                    return
+                end
+
+                MainFrame.Visible = false
+                MiniFrame.Visible = true
+                MiniWindowScale.Scale = 0.78
+
+                local MiniTween = TweenService:Create(MiniWindowScale, MiniInfo, {
+                    Scale = 1,
+                })
+                MiniTween:Play()
             end)
+            MainTween:Play()
         else
-            -- Restore from the pill’s current drag position without jumping.
+            -- Restore the main shell immediately at the pill's compact scale.
+            -- The pill is hidden at the same moment, so there is no visible delay
+            -- before the window begins expanding.
             MainFrame.Position = MiniFrame.Position
             MainFrame.AnchorPoint = MiniFrame.AnchorPoint
-            MainFrame.Visible = Library.Toggled
-            MiniFrame.Visible = Library.Toggled
-            if MiniWindowScale then MiniWindowScale.Scale = 1 end
-            if MainWindowScale then MainWindowScale.Scale = 0.92 end
+            MiniFrame.Visible = false
+            MainFrame.Visible = IsWindowVisible
 
-            Library:SetFloatingDisplaysShellVisible(Library.Toggled)
-            local MiniTween = MiniWindowScale and TweenService:Create(
-                MiniWindowScale,
-                TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-                { Scale = 0.84 }
-            )
-            local MainTween = MainWindowScale and TweenService:Create(
-                MainWindowScale,
-                TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-                { Scale = 1 }
-            )
-            if MiniTween then MiniTween:Play() end
-            task.delay(0.06, function()
-                if MotionToken ~= MinimizeMotionToken or Minimized then return end
-                if MainTween then MainTween:Play() end
-            end)
-            task.delay(0.22, function()
-                if MotionToken ~= MinimizeMotionToken or Minimized then return end
-                MiniFrame.Visible = false
-                MainFrame.Visible = Library.Toggled
-                Library:SyncFloatingDisplays()
-            end)
+            if MiniWindowScale then
+                MiniWindowScale.Scale = 1
+            end
+            if MainWindowScale then
+                MainWindowScale.Scale = 0.78
+            end
+
+            if not IsWindowVisible then
+                return
+            end
+
+            local MainTween = MainWindowScale and TweenService:Create(MainWindowScale, MotionInfo, {
+                Scale = 1,
+            })
+            if MainTween then
+                local MainCompleted
+                MainCompleted = MainTween.Completed:Connect(function()
+                    if MainCompleted then
+                        MainCompleted:Disconnect()
+                        MainCompleted = nil
+                    end
+
+                    if not IsCurrent(false) then
+                        return
+                    end
+
+                    MainFrame.Visible = true
+                    MainWindowScale.Scale = 1
+                end)
+                MainTween:Play()
+            end
         end
     end
 
@@ -16682,8 +16427,6 @@ function Library:CreateWindow(WindowInfo)
         if MiniFrame then
             MiniFrame.Visible = Library.Toggled and Minimized
         end
-        Library:SetFloatingDisplaysShellVisible(Library.Toggled and not Minimized)
-        Library:SyncFloatingDisplays()
     end
 
     function Window:Toggle(Value: boolean?)
@@ -18061,13 +17804,6 @@ function Library:Unload()
     Library.EnabledFeaturesButton = nil
     Library.EnabledFeaturesButtonMini = nil
     table.clear(Library.NotificationHistory)
-    for Index = #Library.FloatingDisplays, 1, -1 do
-        local Display = Library.FloatingDisplays[Index]
-        if Display and Display.Destroy then
-            Library:SafeCallback(Display.Destroy, Display)
-        end
-        table.remove(Library.FloatingDisplays, Index)
-    end
     if ScreenGui then
         ScreenGui:Destroy()
     end
@@ -18095,7 +17831,6 @@ function Library:Unload()
     table.clear(Library.DraggableElements)
     table.clear(Library.KeybindToggles)
     table.clear(Library.DependencyBoxes)
-    table.clear(Library.FloatingDisplays)
 
     table.clear(TransparencyCache)
     table.clear(ActiveTabTweens)
