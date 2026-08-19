@@ -466,9 +466,14 @@ AdvancedRight:AddUIPassthrough("DemoPassthrough", {
 -- Subtabs are useful when a tab has several related views.
 local SubTabA = AdvancedTab:AddSubTab({ Name = "Overview", Icon = "list" })
 local SubTabB = AdvancedTab:AddSubTab({ Name = "Notes", Icon = "notebook-pen" })
-SubTabA:AddLabel("Overview subtab is active by default.")
-SubTabA:AddDivider("Subtab API")
-SubTabB:AddLabel("This is a second tab created with AddSubTab.")
+
+-- A SubTab owns groupboxes; AddLabel/AddDivider belong to the groupbox.
+local OverviewSubBox = SubTabA:AddLeftGroupbox("Overview Content")
+OverviewSubBox:AddLabel("Overview subtab is active by default.")
+OverviewSubBox:AddDivider("Subtab API")
+
+local NotesSubBox = SubTabB:AddLeftGroupbox("Notes Content")
+NotesSubBox:AddLabel("This is a second tab created with AddSubTab.")
 
 --// THEME TAB --------------------------------------------------------------
 
