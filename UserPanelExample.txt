@@ -99,7 +99,7 @@ local LifecycleTab = Window:AddTab({
 
 InfoTab:UserPanelBox({
     Title = "Hello World",
-    UserIcon = false,
+    UserIcon = true,
     Username = false,
     Information = "Example only",
     IsNormal = true,
