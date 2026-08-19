@@ -5,20 +5,20 @@ local ThemeManager = loadstring(game:HttpGet(managerRepo .. "ThemeManager.lua"))
 local SaveManager = loadstring(game:HttpGet(managerRepo .. "SaveManager.lua"))()
 
 ThemeManager:SetLibrary(Library)
-ThemeManager:SetFolder("ComponentGalleryThemes")
+ThemeManager:SetFolder("ComponentDemoThemes")
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-SaveManager:SetFolder("ComponentGallery/Showcase")
+SaveManager:SetFolder("ComponentDemo/Showcase")
 SaveManager:SetSubFolder("Showcase")
 
 
 local Window = Library:CreateWindow({
-    Title = "UI Component Gallery",
+    Title = "UI Component Demo",
     SubTitle = "Normal Obsidian-style usage",
     InitialTab = "Info",
     Footer = {
-        { Text = "Component Demo", Copyable = true, CopyText = "UI Component Gallery" },
+        { Text = "Component Demo", Copyable = true, CopyText = "UI Component Demo" },
         { Text = "RightControl", Copyable = true, CopyText = "RightControl" },
     },
     CopyableFooter = true,
@@ -51,14 +51,14 @@ local Window = Library:CreateWindow({
 
     Popups = {
         {
-            Title = "Welcome to the component gallery",
+            Title = "Welcome to the component demo",
             Description = "This is a normal component demo. It contains no gameplay automation or game-specific logic.",
             ButtonText = "Continue",
         },
         {
             Title = "What is included",
             Description = "Explore controls, themes, config profiles, nested tabs, media, dependencies, notifications, and lifecycle actions.",
-            ButtonText = "Open Gallery",
+            ButtonText = "Open Demo",
         },
     },
 })
@@ -254,7 +254,7 @@ ButtonBox:AddButton({
     Text = "Send Test Notification",
     Func = function()
         Library:Notify({
-            Title = "Component Gallery",
+            Title = "Component Demo",
             Description = "This notification is also recorded in Notification History.",
             Duration = 3,
         })
@@ -540,7 +540,7 @@ FooterBox:AddButton({
     Text = "Set copyable footer",
     Func = function()
         Window:SetFooter({
-            { Text = "Component Demo", Copyable = true, CopyText = "UI Component Gallery" },
+            { Text = "Component Demo", Copyable = true, CopyText = "UI Component Demo" },
             { Text = "RightControl", Copyable = true, CopyText = "RightControl" },
         })
         Library:Notify({
@@ -571,7 +571,7 @@ SaveManager:LoadAutoloadConfig()
 Window:SelectTab("Info")
 
 Library:Notify({
-    Title = "Component Gallery Loaded",
+    Title = "Component Demo Loaded",
     Description = "Explore the full normal component example, including color picker, themes, config, and multi dropdown.",
     Duration = 4,
 })
