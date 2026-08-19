@@ -14345,6 +14345,7 @@ function Library:CreateWindow(WindowInfo)
 
             local GroupboxCollapseArrow
             local GroupboxLine
+            local GroupboxHeaderButton
 
             do
                 GroupboxHolder = New("Frame", {
@@ -14426,6 +14427,19 @@ function Library:CreateWindow(WindowInfo)
                         Size = UDim2.fromOffset(22, 22),
                         Parent = GroupboxHolder,
                     })
+
+                    -- The entire title row is a collapse affordance, while the
+                    -- arrow remains separately clickable for precise interaction.
+                    GroupboxHeaderButton = New("TextButton", {
+                        Active = true,
+                        AutoButtonColor = false,
+                        BackgroundTransparency = 1,
+                        Position = UDim2.fromOffset(0, 0),
+                        Size = UDim2.new(1, -34, 0, 34),
+                        Text = "",
+                        ZIndex = 3,
+                        Parent = GroupboxHolder,
+                    })
                 end
 
                 GroupboxContainer = New("Frame", {
@@ -14460,6 +14474,8 @@ function Library:CreateWindow(WindowInfo)
 
                 BoxHolder = BoxHolder,
                 Holder = GroupboxHolder,
+                Header = GroupboxHolder,
+                CollapseButton = GroupboxHeaderButton or GroupboxCollapseArrow,
                 Container = GroupboxContainer,
 
                 Tab = Owner,
@@ -14602,9 +14618,17 @@ function Library:CreateWindow(WindowInfo)
             end
 
             if Info.DisableCollapsing ~= true then
-                GroupboxCollapseArrow.MouseButton1Click:Connect(function()
-                    Groupbox:ToggleCollapsed()
-                end)
+                -- Register both connections on the groupbox so Destroy() cleans them.
+                if GroupboxHeaderButton then
+                    table.insert(Groupbox.Connections, GroupboxHeaderButton.MouseButton1Click:Connect(function()
+                        Groupbox:ToggleCollapsed()
+                    end))
+                end
+                if GroupboxCollapseArrow then
+                    table.insert(Groupbox.Connections, GroupboxCollapseArrow.MouseButton1Click:Connect(function()
+                        Groupbox:ToggleCollapsed()
+                    end))
+                end
             end
 
             Groupbox.AddTabbox = AddTabbox
