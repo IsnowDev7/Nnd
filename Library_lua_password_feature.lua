@@ -11158,6 +11158,34 @@ function Library:ToggleEnabledFeatures()
     Library:_BuildEnabledFeatures()
     Library:SetEnabledFeaturesVisible(not Library.EnabledFeaturesOpen)
 end
+
+function Library:AddPopup(Info)
+    if typeof(Info) ~= "table" then
+        return nil
+    end
+
+    local Popup = table.clone(Info)
+    Popup.Title = tostring(Popup.Title or "News!")
+    Popup.Description = tostring(Popup.Description or "")
+    Popup.Image = Popup.Image
+    Popup.ButtonText = tostring(Popup.ButtonText or "Continue")
+    Popup.Icon = Popup.Icon or "info"
+    Popup.AutoDismiss = true
+    Popup.OutsideClickDismiss = false
+
+    table.insert(Library.PopupQueue, Popup)
+
+    if Library.Window and Library.ScreenGui and not Library.PopupSequenceRunning then
+        task.defer(function()
+            if not Library.Unloaded and Library.Window then
+                Library:_RunPopupQueue(Library.Window, false)
+            end
+        end)
+    end
+
+    return Popup
+end
+
 function Library:CreateWindow(WindowInfo)
     WindowInfo = Library:Validate(WindowInfo, Templates.Window)
 
@@ -16327,32 +16355,6 @@ function Library:CreateWindow(WindowInfo)
     --// Sequential pre-window popups
     -- Uses the official AddDialog frame, footer-button renderer, outline, and
     -- theme system. Popups are queued before CreateWindow and shown in order.
-    function Library:AddPopup(Info)
-        if typeof(Info) ~= "table" then
-            return nil
-        end
-
-        local Popup = table.clone(Info)
-        Popup.Title = tostring(Popup.Title or "News!")
-        Popup.Description = tostring(Popup.Description or "")
-        Popup.Image = Popup.Image
-        Popup.ButtonText = tostring(Popup.ButtonText or "Continue")
-        Popup.Icon = Popup.Icon or "info"
-        Popup.AutoDismiss = true
-        Popup.OutsideClickDismiss = false
-
-        table.insert(Library.PopupQueue, Popup)
-
-        if Library.Window and Library.ScreenGui and not Library.PopupSequenceRunning then
-            task.defer(function()
-                if not Library.Unloaded and Library.Window then
-                    Library:_RunPopupQueue(Library.Window, false)
-                end
-            end)
-        end
-
-        return Popup
-    end
 
     function Library:AddNextPopup(Info)
         return Library:AddPopup(Info)
