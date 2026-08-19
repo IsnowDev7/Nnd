@@ -302,6 +302,11 @@ local Library = {
     --// Dialogues \\--
     Dialogues = {},
     ActiveDialog = nil,
+    PopupQueue = {},
+    PopupSequenceRunning = false,
+    PopupSequenceId = 0,
+    PopupWindow = nil,
+    PopupParent = nil,
     MainFrame = nil,
     ActiveExpandedDropdown = nil,
 
@@ -475,6 +480,7 @@ local Templates = {
         IconSize = UDim2.fromOffset(30, 30),
 
         AutoShow = true,
+        Popups = {},
         Center = true,
         Resizable = true,
 
@@ -1518,6 +1524,12 @@ local function NormalizeCustomIcon(Icon: string): string?
 
     if AssetId and (Icon:match("roblox%.com") or Icon:match("create%.roblox%.com")) then
         return "rbxassetid://" .. AssetId
+    end
+
+    -- Accept the convenient rbxasset:123 shorthand used in popup examples.
+    local ShortAssetId = Icon:match("^rbxasset:(%d+)$")
+    if ShortAssetId then
+        return "rbxassetid://" .. ShortAssetId
     end
 
     -- Roblox-native content formats can be assigned directly.
@@ -11149,6 +11161,12 @@ end
 function Library:CreateWindow(WindowInfo)
     WindowInfo = Library:Validate(WindowInfo, Templates.Window)
 
+    if typeof(WindowInfo.Popups) == "table" then
+        for _, Popup in WindowInfo.Popups do
+            Library:AddPopup(Popup)
+        end
+    end
+
     Library.BackgroundBlur = WindowInfo.BackgroundBlur
     Library.TitleAnimation = WindowInfo.TitleAnimation
     Library.IconAnimation = WindowInfo.IconAnimation
@@ -12424,6 +12442,16 @@ function Library:CreateWindow(WindowInfo)
 
     --// Window Table \\--
     local Window = {}
+
+    function Window:AddPopup(Info)
+        Library:AddPopup(Info)
+        return self
+    end
+
+    function Window:AddNextPopup(Info)
+        Library:AddNextPopup(Info)
+        return self
+    end
     local Fading = false
 
     local function SetUICorner(UICorner, Corner, HalfCurrent, HalfValue, Value)
@@ -14053,6 +14081,15 @@ function Library:CreateWindow(WindowInfo)
         end
 
         Tab.AddTabbox = AddTabbox
+        Tab.AddTabbox1 = function(self, Info)
+            if typeof(Info) == "string" then
+                Info = { Name = Info }
+            else
+                Info = typeof(Info) == "table" and table.clone(Info) or {}
+            end
+            Info.Side = Info.Side or 1
+            return AddTabbox(self, Info)
+        end
 
         function Tab:AddLeftTabbox(Name)
             return self:AddTabbox({ Side = 1, Name = Name })
@@ -14377,6 +14414,15 @@ function Library:CreateWindow(WindowInfo)
             end
 
             Groupbox.AddTabbox = AddTabbox
+            Groupbox.AddTabbox1 = function(self, Info)
+                if typeof(Info) == "string" then
+                    Info = { Name = Info }
+                else
+                    Info = typeof(Info) == "table" and table.clone(Info) or {}
+                end
+                Info.Side = Info.Side or 1
+                return AddTabbox(self, Info)
+            end
             setmetatable(Groupbox, BaseGroupbox)
 
             Groupbox:Resize()
@@ -15075,6 +15121,7 @@ function Library:CreateWindow(WindowInfo)
             SubTab.AddLeftGroupbox = Tab.AddLeftGroupbox
             SubTab.AddRightGroupbox = Tab.AddRightGroupbox
             SubTab.AddTabbox = AddTabbox
+            SubTab.AddTabbox1 = Tab.AddTabbox1
             SubTab.AddLeftTabbox = Tab.AddLeftTabbox
             SubTab.AddRightTabbox = Tab.AddRightTabbox
 
@@ -15807,7 +15854,7 @@ function Library:CreateWindow(WindowInfo)
             Active = false,
             ZIndex = 9000,
             Visible = true,
-            Parent = MainFrame,
+            Parent = Library.PopupParent or MainFrame,
         })
         TweenService:Create(DialogOverlay, Library.TweenInfo, {
             BackgroundTransparency = 0.5,
@@ -16277,6 +16324,156 @@ function Library:CreateWindow(WindowInfo)
         return Dialog
     end
 
+    --// Sequential pre-window popups
+    -- Uses the official AddDialog frame, footer-button renderer, outline, and
+    -- theme system. Popups are queued before CreateWindow and shown in order.
+    function Library:AddPopup(Info)
+        if typeof(Info) ~= "table" then
+            return nil
+        end
+
+        local Popup = table.clone(Info)
+        Popup.Title = tostring(Popup.Title or "News!")
+        Popup.Description = tostring(Popup.Description or "")
+        Popup.Image = Popup.Image
+        Popup.ButtonText = tostring(Popup.ButtonText or "Continue")
+        Popup.Icon = Popup.Icon or "info"
+        Popup.AutoDismiss = true
+        Popup.OutsideClickDismiss = false
+
+        table.insert(Library.PopupQueue, Popup)
+
+        if Library.Window and Library.ScreenGui and not Library.PopupSequenceRunning then
+            task.defer(function()
+                if not Library.Unloaded and Library.Window then
+                    Library:_RunPopupQueue(Library.Window, false)
+                end
+            end)
+        end
+
+        return Popup
+    end
+
+    function Library:AddNextPopup(Info)
+        return Library:AddPopup(Info)
+    end
+
+    function Library:_RunPopupQueue(Window, AutoShow)
+        if Library.PopupSequenceRunning then
+            return
+        end
+
+        if #Library.PopupQueue == 0 then
+            if AutoShow and Window and not Library.Unloaded then
+                task.defer(function()
+                    if not Library.Unloaded then
+                        Window:Toggle(true)
+                    end
+                end)
+            end
+            return
+        end
+
+        Library.PopupSequenceRunning = true
+        Library.PopupWindow = Window
+        Library.PopupParent = Library.ScreenGui
+        Library.PopupSequenceId += 1
+
+        local MainFrame = Library.MainFrame
+        if MainFrame then
+            MainFrame.Visible = false
+        end
+
+        local function Finish()
+            Library.PopupSequenceRunning = false
+            Library.PopupWindow = nil
+            Library.PopupParent = nil
+
+            if AutoShow and Window and not Library.Unloaded then
+                task.defer(function()
+                    if not Library.Unloaded then
+                        Window:Toggle(true)
+                    end
+                end)
+            end
+        end
+
+        local function ShowNext()
+            if Library.Unloaded or not Window then
+                Library.PopupQueue = {}
+                Finish()
+                return
+            end
+
+            local Data = table.remove(Library.PopupQueue, 1)
+            if not Data then
+                Finish()
+                return
+            end
+
+            local PopupId = "NndPopup_" .. tostring(Library.PopupSequenceId) .. "_" .. tostring(os.clock())
+            local Dialog = Window:AddDialog(PopupId, {
+                Title = Data.Title,
+                Description = "",
+                Icon = Data.Icon,
+                AutoDismiss = true,
+                OutsideClickDismiss = false,
+                FooterButtons = {
+                    Proceed = {
+                        Title = Data.ButtonText,
+                        Variant = Data.ButtonVariant or "Primary",
+                        Order = 1,
+                        Callback = function(CurrentDialog)
+                            Library:SafeCallback(Data.Callback, CurrentDialog, Data)
+                            task.defer(ShowNext)
+                        end,
+                    },
+                },
+            })
+
+            local Image = Data.Image
+            if typeof(Image) == "number" then
+                Image = tostring(Image)
+            end
+            if typeof(Image) == "string" then
+                Image = Image:gsub("^%s+", ""):gsub("%s+$", "")
+                if Image == "" or Image == "rbxasset:0" or Image == "rbxassetid://0" then
+                    Image = nil
+                end
+            end
+
+            if Image then
+                Dialog:AddImage("PopupImage", {
+                    Image = Image,
+                    Height = Data.ImageHeight or 170,
+                    ScaleType = Data.ScaleType or Enum.ScaleType.Fit,
+                    Transparency = Data.ImageTransparency or 0,
+                    BackgroundTransparency = Data.ImageBackgroundTransparency or 0,
+                })
+            end
+
+            if Data.Description ~= "" then
+                local DescriptionLabel = Dialog:AddLabel({
+                    Text = Data.Description,
+                    DoesWrap = true,
+                    Size = Data.DescriptionTextSize or 14,
+                    Visible = true,
+                })
+                if DescriptionLabel and DescriptionLabel.TextLabel then
+                    DescriptionLabel.TextLabel.TextXAlignment = Enum.TextXAlignment.Center
+                end
+            end
+
+            Dialog:Resize()
+        end
+
+        ShowNext()
+    end
+
+    function Library:ClearPopupQueue()
+        Library.PopupQueue = {}
+    end
+
     --// Password / premium key dialog
     -- Uses the library's existing dialog, input, toggle, and footer button
     -- constructors so it matches the Obsidian window exactly.
@@ -16646,7 +16843,11 @@ function Library:CreateWindow(WindowInfo)
         Window:SetSidebarWidth(WindowInfo.SidebarCompactWidth)
     end
     if WindowInfo.AutoShow and not Library.ActiveLoading then
-        task.spawn(Library.Toggle)
+        if #Library.PopupQueue > 0 then
+            Library:_RunPopupQueue(Window, true)
+        else
+            task.spawn(Library.Toggle)
+        end
     end
 
     local function CreateSquareMobileButton(IconName)
@@ -17804,6 +18005,10 @@ function Library:Unload()
     Library.EnabledFeaturesButton = nil
     Library.EnabledFeaturesButtonMini = nil
     table.clear(Library.NotificationHistory)
+    Library.PopupQueue = {}
+    Library.PopupSequenceRunning = false
+    Library.PopupWindow = nil
+    Library.PopupParent = nil
     if ScreenGui then
         ScreenGui:Destroy()
     end

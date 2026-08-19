@@ -9,10 +9,10 @@
     - Toggle, slider, dropdown, input, label, image, button, and hold button
     - KeyPicker and window minimize/restore animation controls
     - Safe unload cleanup
+    - Sequential pre-window AddPopup/AddNextPopup dialogs
+    - Groupbox:AddTabbox1 nested tabs
 
-    Not included here:
-    - The old floating display component, which was removed
-    - The new popup and nested-tabbox work, which are paused and not yet part of the library
+    The old floating display component was removed.
 ]]
 
 local Library = loadstring(game:HttpGet(
@@ -52,6 +52,23 @@ local Window = Library:CreateWindow({
     Minimizable = true,
     MinimizedWidth = 280,
     MinimizedSubtitle = "RightControl to reopen",
+
+    -- These popups appear before the main window opens. The second item is
+    -- shown after the first popup's Proceed button is pressed.
+    Popups = {
+        {
+            Title = "News!",
+            Image = "rbxassetid://6031075931",
+            Description = "Yoooo, a new update just dropped.",
+            ButtonText = "Proceed",
+        },
+        {
+            Title = "New Update",
+            Image = "https://tr.rbxcdn.com/180DAY-79e666901b2c722b06310d267bc6c152/768/432/Image/Webp/noFilter",
+            Description = "Notification History, Enabled Features, glow, and synchronized animations are ready.",
+            ButtonText = "Open UI",
+        },
+    },
 })
 
 Window:SetSidebarWidth(44)
@@ -227,6 +244,28 @@ ControlsBox:AddInput("ExampleInput", {
 
 ControlsBox:AddLabel("Normal label component")
 
+-- AddTabbox1 places a tabbox inside this groupbox using a shorter API.
+local ModesTabbox = ControlsBox:AddTabbox1({
+    Name = "Modes",
+})
+
+local BasicModeTab = ModesTabbox:AddTab("Basic", "circle")
+BasicModeTab:AddLabel("Basic mode content")
+BasicModeTab:AddToggle("BasicModeToggle", {
+    Text = "Enable Basic Mode",
+    Default = false,
+})
+
+local AdvancedModeTab = ModesTabbox:AddTab("Advanced", "settings")
+AdvancedModeTab:AddLabel("Advanced mode content")
+AdvancedModeTab:AddSlider("AdvancedPower", {
+    Text = "Power",
+    Default = 25,
+    Min = 1,
+    Max = 100,
+    Rounding = 0,
+})
+
 local ImageBox = ComponentsTab:AddLeftGroupbox(
     "Images",
     "image",
@@ -394,6 +433,6 @@ Window:SelectTab(InfoTab)
 
 Library:Notify({
     Title = "Nnd Example Loaded",
-    Description = "UserPanel, glow, animations, hold button, notifications, and collapsible groupboxes are ready.",
+    Description = "UserPanel, glow, popups, nested tabbox, animations, hold button, notifications, and collapsible groupboxes are ready.",
     Duration = 4,
 })
