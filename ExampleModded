@@ -1,4 +1,4 @@
-local repo = "https://raw.githubusercontent.com/IsnowDev7/Nnd/main/Library_lua_password_feature.lua"
+local repo = "https://raw.githubusercontent.com/IsnowDev7/Nnd/refs/heads/main/Obsidian%20UI%20Modded"
 local managerRepo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/addons/"
 local Library = loadstring(game:HttpGet(repo))()
 local ThemeManager = loadstring(game:HttpGet(managerRepo .. "ThemeManager.lua"))()
