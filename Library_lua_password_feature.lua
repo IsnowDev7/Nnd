@@ -481,6 +481,8 @@ local Templates = {
 
         AutoShow = true,
         Popups = {},
+        -- Optional name of the top-level tab that should open first.
+        InitialTab = nil,
         Center = true,
         Resizable = true,
 
@@ -12470,6 +12472,8 @@ function Library:CreateWindow(WindowInfo)
 
     --// Window Table \\--
     local Window = {}
+    -- The requested tab is resolved by name after user code registers tabs.
+    Window.InitialTab = WindowInfo.InitialTab or WindowInfo.DefaultTab
 
     function Window:AddPopup(Info)
         Library:AddPopup(Info)
@@ -13526,6 +13530,9 @@ function Library:CreateWindow(WindowInfo)
 
             Groupboxes = {},
             Tabboxes = {},
+            -- AddSubTab stores children here; initialize it for every top-level tab.
+            SubTabs = {},
+            ActiveSubTab = nil,
             DependencyGroupboxes = {},
 
             Type = "Tab",
@@ -15548,6 +15555,40 @@ function Library:CreateWindow(WindowInfo)
 
         Library.Tabs[Name] = Tab
 
+        -- If this is the configured startup tab, select it by its name after the
+        -- tab has been registered. This also works when it is not the first tab.
+        if Window.InitialTab and string.lower(tostring(Window.InitialTab)) == string.lower(tostring(Name)) then
+            task.defer(function()
+                if not Library.Unloaded and Library.Tabs[Name] == Tab then
+                    Window:SelectTab(Name)
+                end
+            end)
+        end
+
+        return Tab
+    end
+
+    function Window:SelectTab(Target)
+        local Tab = Target
+        if typeof(Target) == "string" then
+            Tab = Library.Tabs[Target]
+            if not Tab then
+                local Wanted = string.lower(Target)
+                for Name, Candidate in Library.Tabs do
+                    if string.lower(tostring(Name)) == Wanted then
+                        Tab = Candidate
+                        break
+                    end
+                end
+            end
+        end
+
+        if typeof(Tab) ~= "table" or typeof(Tab.Show) ~= "function" then
+            warn("SelectTab: unknown tab " .. tostring(Target))
+            return nil
+        end
+
+        Tab:Show()
         return Tab
     end
 
