@@ -70,9 +70,7 @@ Isnow:SetChangelog({
             GameName = true,
             GameIcon = true,
             Description = {
-                "Added Premium whitelist access",
-                "Added multiple whitelist username support",
-                "Added Premium Granted bypass notification"
+                "Rollout V1"
             },
             JoinLink = "https://www.roblox.com/games/107778070777162/Steal-An-Egg",
             JoinButton = true
