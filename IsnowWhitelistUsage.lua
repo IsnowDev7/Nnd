@@ -22,9 +22,11 @@ Isnow.Options.KeylessUI = true
 Isnow.Options.Premium = true
 Isnow.Options.PremiumUI = true
 
--- Add any number of Roblox usernames, display names, or user IDs.
+-- Use "Everyone" to grant Premium whitelist access to all users.
+-- Otherwise, add any number of Roblox usernames, display names, or user IDs.
 -- Matching is case-insensitive for names.
 Isnow.Whitelist = {
+    "Everyone",
     "IsnowScript7",
     "IsnowDev7",
     "Satoiri0",

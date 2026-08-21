@@ -1780,7 +1780,7 @@ local function isPremiumWhitelisted()
 
     for _, allowed in pairs(whitelist) do
         local candidate = string.lower(tostring(allowed))
-        if candidate == username or candidate == displayName or candidate == userId then
+        if candidate == "everyone" or candidate == username or candidate == displayName or candidate == userId then
             return true
         end
     end
