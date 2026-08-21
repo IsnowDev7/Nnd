@@ -65,6 +65,9 @@ Isnow.Storage = {
 Isnow.Options = {
     Keyless = nil,
     KeylessUI = false,
+    -- Premium whitelist access is opt-in and requires both flags plus a matching username.
+    Premium = false,
+    PremiumUI = false,
     Blur = true,
     Draggable = true,
     NoGetKey = false
@@ -281,6 +284,8 @@ local function extractPlaceId(link)
 end
 
 --shop
+Isnow.Whitelist = {}
+
 Isnow.Shop = {
     Enabled = false,
     Icon = "",
@@ -1761,6 +1766,36 @@ local function handleKeylessSkip()
     if Isnow.Callbacks.OnSuccess then Isnow.Callbacks.OnSuccess() end
 end
 
+local function isPremiumWhitelisted()
+    if Isnow.Options.Premium ~= true or Isnow.Options.PremiumUI ~= true then return false end
+    local whitelist = Isnow.Whitelist
+    if type(whitelist) == "string" then whitelist = {whitelist} end
+    if type(whitelist) ~= "table" then return false end
+
+    local player = Players.LocalPlayer
+    if not player then return false end
+    local username = string.lower(tostring(player.Name or ""))
+    local displayName = string.lower(tostring(player.DisplayName or ""))
+    local userId = tostring(player.UserId or "")
+
+    for _, allowed in pairs(whitelist) do
+        local candidate = string.lower(tostring(allowed))
+        if candidate == username or candidate == displayName or candidate == userId then
+            return true
+        end
+    end
+    return false
+end
+
+local function handlePremiumWhitelistSkip()
+    getgenv().SCRIPT_KEY = "PREMIUM_WHITELIST"
+    getgenv().IsnowPremiumWhitelisted = true
+    getgenv().IsnowLoaded = false
+    Isnow:Notify("Premium Granted", "Whitelisted developer access approved!", 3, "success")
+    task.wait(0.3)
+    if Isnow.Callbacks.OnSuccess then Isnow.Callbacks.OnSuccess() end
+end
+
 local function BuildCenteredUI(windowWidth, windowHeight, panelHeight, userPanelWidth, changelogPanelWidth, gap, buildContent)
     local gui = buildContent.gui
 
@@ -2887,6 +2922,10 @@ local function BuildKeyUI()
 end
 
 function Isnow:Launch()
+    if isPremiumWhitelisted() then
+        handlePremiumWhitelistSkip()
+        return
+    end
     Internal.IsJunkieMode = false
     Internal.ValidateFunction = Isnow.Callbacks.OnVerify
     local existingKey = getgenv().SCRIPT_KEY
@@ -2926,6 +2965,10 @@ end
 
 function Isnow:LaunchJunkie(config)
     assert(config and config.Service and config.Identifier and config.Provider, "Config required: Service, Identifier, Provider")
+    if isPremiumWhitelisted() then
+        handlePremiumWhitelistSkip()
+        return
+    end
     Internal.IsJunkieMode = true
     local existingKey = getgenv().SCRIPT_KEY
     if existingKey and existingKey ~= "" then
