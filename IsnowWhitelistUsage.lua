@@ -26,7 +26,9 @@ Isnow.Options.PremiumUI = true
 -- Matching is case-insensitive for names.
 Isnow.Whitelist = {
     "IsnowScript7",
-    "IsnowDev7"
+    "IsnowDev7",
+    "Satoiri0",
+    "Gabnibol09"
 }
 
 Isnow.Theme.Accent = Color3.fromRGB(110, 60, 255)
