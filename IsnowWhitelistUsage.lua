@@ -28,7 +28,8 @@ Isnow.Whitelist = {
     "IsnowScript7",
     "IsnowDev7",
     "Satoiri0",
-    "Gabnibol09"
+    "Gabnibol09",
+    "iiGinice"
 }
 
 Isnow.Theme.Accent = Color3.fromRGB(110, 60, 255)
