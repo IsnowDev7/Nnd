@@ -2414,7 +2414,6 @@ function NullUI:CreateWindow(opts)
 
 		local viewerImage = Instance.new("ImageButton")
 		viewerImage.Name = "Image"
-		viewerImage.Text = ""
 		viewerImage.AutoButtonColor = false
 		viewerImage.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
 		viewerImage.BackgroundTransparency = 0
