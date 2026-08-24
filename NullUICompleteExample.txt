@@ -26,16 +26,16 @@ local Window = NullUI:CreateWindow({
 	Title = "NullUI",
 	Subtitle = "Complete Example Usage",
 	Icon = "Lucide:panels-top-left",
-	Size = UDim2.fromOffset(640, 430),
-	MinSize = Vector2.new(500, 350),
+	Size = UDim2.fromOffset(560, 390),
+	MinSize = Vector2.new(460, 330),
 	Draggable = true,
 	Resizable = true,
 	BlurBackground = true,
 	Glow = {
 		Enabled = true,
-		Color = Color3.fromRGB(255, 255, 255),
+		Color = Color3.fromRGB(0, 0, 0),
 		Thickness = 2,
-		Transparency = 0.45,
+		Transparency = 0.35,
 	},
 	SidebarPanel = true,
 	SidebarURL = "rbxassetid://6031075931",
@@ -165,9 +165,15 @@ Overview:AddCard({
 	},
 })
 
-Overview:AddSystemInfoGrid({
-	Description = "Live client information supplied by the library.",
-})
+	Overview:AddSystemInfoGrid({
+		Description = "Live client information supplied by the library.",
+	})
+
+	Overview:AddParagraph({
+		Title = "Sidebar image preview",
+		Text = "Click the image in the left panel to open a centered 16:9 preview. Tap outside the preview or on the image to close it.",
+		Icon = "Lucide:scan-search",
+	})
 
 local RuntimeInfo = Overview:AddInfoGrid({
 	Title = "Example State",
