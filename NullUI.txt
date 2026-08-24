@@ -161,14 +161,12 @@ local function EnsureAcrylicDOF()
 	local stale = Lighting:FindFirstChild(ACRYLIC_DOF_NAME)
 	if stale then stale:Destroy() end
  
-	local dof = Instance.new("DepthOfFieldEffect")
+		local dof = Instance.new("BlurEffect")
 	dof.Name = ACRYLIC_DOF_NAME
-	dof.FarIntensity = 0
-	dof.FocusDistance = 0.05
-	dof.InFocusRadius = 0.1
-	dof.NearIntensity = 1
+	dof.Size = 18
 	dof.Enabled = false
 	dof.Parent = Lighting
+
 	AcrylicDOF = dof
 	LibJanitor:Add(dof)
 	return dof
@@ -2161,22 +2159,19 @@ function NullUI:CreateWindow(opts)
 	GlassLayer(main, NullUI.Theme.CornerRadius, 0.985)
 
 	local glowInfo = type(opts.Glow) == "table" and opts.Glow or { Enabled = opts.Glow == true }
-	local glowFrame = Instance.new("Frame")
+	local glowFrame = Instance.new("ImageLabel")
 	glowFrame.Name = "WindowGlow"
 	glowFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 	glowFrame.Position = main.Position
-	glowFrame.Size = UDim2.new(size.X.Scale, size.X.Offset + 12, size.Y.Scale, size.Y.Offset + 12)
+	glowFrame.Size = UDim2.new(size.X.Scale, size.X.Offset + 40, size.Y.Scale, size.Y.Offset + 40)
 	glowFrame.BackgroundTransparency = 1
 	glowFrame.BorderSizePixel = 0
+	glowFrame.Image = glowInfo.Image or "rbxassetid://88645182616510"
+	glowFrame.ImageColor3 = glowInfo.Color or Color3.new(1, 1, 1)
+	glowFrame.ImageTransparency = glowInfo.Enabled == true and (tonumber(glowInfo.Transparency) or 0.45) or 1
+	glowFrame.ScaleType = Enum.ScaleType.Stretch
 	glowFrame.ZIndex = Z.Window - 1
 	glowFrame.Parent = root
-	Corner(glowFrame, NullUI.Theme.CornerRadius + 6)
-	local glowStroke = Stroke(
-		glowFrame,
-		glowInfo.Color or Color3.new(1, 1, 1),
-		tonumber(glowInfo.Thickness) or 2,
-		glowInfo.Enabled == true and (tonumber(glowInfo.Transparency) or 0.58) or 1
-	)
 
 	local topbar = Instance.new("Frame")
 	topbar.Name = "TopBar"
@@ -2189,7 +2184,7 @@ function NullUI:CreateWindow(opts)
 	controlsHolder.Name = "WindowControls"
 	controlsHolder.AnchorPoint = Vector2.new(1, 0.5)
 	controlsHolder.Position = UDim2.new(1, -margin, 0.5, 0)
-	controlsHolder.Size = UDim2.fromOffset(154, 26)
+	controlsHolder.Size = UDim2.fromOffset(120, 26)
 	controlsHolder.BackgroundTransparency = 1
 	controlsHolder.ZIndex = Z.Content + 1
 	controlsHolder.Parent = topbar
@@ -2323,6 +2318,7 @@ function NullUI:CreateWindow(opts)
 		sidebarImage.ImageTransparency = 0
 		sidebarImage.ZIndex = Z.Content + 1
 		sidebarImage.Parent = sidebarPanel
+		Corner(sidebarImage, 10)
 		SetImageSource(sidebarImage, sidebarInfo.SidebarURL or sidebarInfo.Image or sidebarInfo.URL)
 
 		local sidebarFade = Instance.new("Frame")
@@ -2335,6 +2331,7 @@ function NullUI:CreateWindow(opts)
 		sidebarFade.Size = UDim2.new(1, 0, 0, 48)
 		sidebarFade.ZIndex = Z.Content + 2
 		sidebarFade.Parent = sidebarPanel
+		Corner(sidebarFade, 10)
 		local fadeGradient = Instance.new("UIGradient")
 		fadeGradient.Rotation = 90
 		fadeGradient.Transparency = NumberSequence.new({
@@ -2475,7 +2472,7 @@ function NullUI:CreateWindow(opts)
 		_searchIndex    = {},
 		_useBlur        = useBlur == true,
 		_glowFrame      = glowFrame,
-		_glowStroke     = glowStroke,
+		_glowInfo       = glowInfo,
 
 		_defaultTabName = opts.DefaultTab,
 		_tabChangeListeners = {},
@@ -2485,10 +2482,11 @@ function NullUI:CreateWindow(opts)
 	local function syncGlow()
 		if not glowFrame.Parent then return end
 		glowFrame.Position = main.Position
-		glowFrame.Size = UDim2.new(main.Size.X.Scale, main.Size.X.Offset + 12, main.Size.Y.Scale, main.Size.Y.Offset + 12)
+		glowFrame.Size = UDim2.new(main.Size.X.Scale, main.Size.X.Offset + 40, main.Size.Y.Scale, main.Size.Y.Offset + 40)
 	end
 	jan:Add(main:GetPropertyChangedSignal("Position"):Connect(syncGlow))
 	jan:Add(main:GetPropertyChangedSignal("Size"):Connect(syncGlow))
+	glowFrame.Visible = glowInfo.Enabled == true
 	syncGlow()
 
 	table.insert(NullUI._Windows, self)
@@ -2572,14 +2570,32 @@ function NullUI:CreateWindow(opts)
 		end))
 	end
  
-	local homeToggle = addControl("home", "HomeToggleButton", 5, NullUI.Theme.Text)
-	homeToggle.Size = UDim2.fromOffset(30, 26)
-	homeToggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	homeToggle.BackgroundTransparency = 0.94
-	Corner(homeToggle, 8)
-	jan:Add(homeToggle.MouseButton1Click:Connect(function()
-		self:Toggle()
+	local closedToggle = Instance.new("ImageButton")
+	closedToggle.Name = "ClosedHomeToggle"
+	closedToggle.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+	closedToggle.BackgroundTransparency = 0.08
+	closedToggle.BorderSizePixel = 0
+	closedToggle.Size = UDim2.fromOffset(34, 34)
+	closedToggle.Position = UDim2.fromOffset(18, 18)
+	closedToggle.Image = ResolveIcon("home")
+	closedToggle.ImageColor3 = Color3.new(1, 1, 1)
+	closedToggle.ImageTransparency = 0.05
+	closedToggle.AutoButtonColor = false
+	closedToggle.Visible = false
+	closedToggle.ZIndex = Z.Toast
+	closedToggle.Parent = root
+	Corner(closedToggle, 9)
+	Stroke(closedToggle, Color3.new(1, 1, 1), 1, 0.72)
+	jan:Add(closedToggle.MouseEnter:Connect(function()
+		Tween(closedToggle, { BackgroundTransparency = 0 }, 0.12)
 	end))
+	jan:Add(closedToggle.MouseLeave:Connect(function()
+		Tween(closedToggle, { BackgroundTransparency = 0.08 }, 0.12)
+	end))
+	jan:Add(closedToggle.MouseButton1Click:Connect(function()
+		self:Open()
+	end))
+	self._closedToggle = closedToggle
 
 	if toggleKey then
 		NullUI:Notify({
@@ -2603,12 +2619,11 @@ function Window:IsOpen()
 end
 
 function Window:SetGlow(enabled, info)
-	if not self._glowStroke then return end
+	if not self._glowFrame then return end
 	info = type(info) == "table" and info or {}
-	if typeof(info.Color) == "Color3" then self._glowStroke.Color = info.Color end
-	if tonumber(info.Thickness) then self._glowStroke.Thickness = tonumber(info.Thickness) end
-	local transparency = tonumber(info.Transparency) or 0.58
-	self._glowStroke.Transparency = enabled and math.clamp(transparency, 0, 1) or 1
+	if typeof(info.Color) == "Color3" then self._glowFrame.ImageColor3 = info.Color end
+	local transparency = tonumber(info.Transparency) or 0.45
+	self._glowFrame.ImageTransparency = enabled and math.clamp(transparency, 0, 1) or 1
 end
 
 function Window:Destroy()
@@ -2651,9 +2666,11 @@ function Window:Close()
 	if self._destroyed or self._busy or self._state ~= "open" then return end
 	self._busy = true
 	self._state = "closed"
- 
+	if self._glowFrame then self._glowFrame.Visible = false end
+	if self._closedToggle then self._closedToggle.Visible = true end
+
 	CloseAnyOpenPopup()
- 
+
 	if self._useBlur then
 		VisibleWindows = math.max(0, VisibleWindows - 1)
 		UpdateBlur()
@@ -2683,10 +2700,12 @@ function Window:Open()
 	if self._destroyed or self._busy or self._state ~= "closed" then return end
 	self._busy = true
 	self._state = "open"
- 
+	if self._closedToggle then self._closedToggle.Visible = false end
+	if self._glowFrame and self._glowInfo.Enabled == true then self._glowFrame.Visible = true end
+
 	local gui = self._gui
 	gui.Visible = true
- 
+
 	if self._useBlur then
 		VisibleWindows = VisibleWindows + 1
 		UpdateBlur()
@@ -2759,10 +2778,11 @@ function Window:AddDockButton(opts)
 	local margin = NullUI.Theme.Margin
  
 	if not self._dock then
-		local shrunkSize = UDim2.new(0, 130, 1, -(58 + margin + DOCK_HEIGHT + 10))
+		local tabTop = self._tabBar.Position.Y.Offset
+		local shrunkSize = UDim2.new(0, 130, 1, -(tabTop + margin + DOCK_HEIGHT + 10))
 		self._tabBar.Size = shrunkSize
 		self._tabIndicatorLayer.Size = shrunkSize
- 
+
 		local dock = Instance.new("Frame")
 		dock.Name = "Dock"
 		dock.BackgroundTransparency = 1
