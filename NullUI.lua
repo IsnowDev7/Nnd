@@ -853,6 +853,134 @@ local function SetImageSource(image, source)
 	image.Image = initial
 end
 
+local VIDEO_ASSET_FOLDER = ASSETS_FOLDER .. "/Videos"
+local VideoAssetCache = {}
+
+local function EnsureVideoFolder()
+	if not (fn_isfolder and fn_makefolder) then return false end
+	if not EnsureAssetsFolder() then return false end
+	local ok = pcall(function()
+		if not fn_isfolder(VIDEO_ASSET_FOLDER) then fn_makefolder(VIDEO_ASSET_FOLDER) end
+	end)
+	return ok
+end
+
+local function VideoAssetPath(source)
+	local safe = tostring(source):gsub("[^%w_%-]", "_")
+	if #safe > 72 then safe = safe:sub(1, 72) end
+	return VIDEO_ASSET_FOLDER .. "/" .. safe .. ".webm"
+end
+
+local function IsRawGitHubWebM(source)
+	return type(source) == "string"
+		and source:match("^https://raw%.githubusercontent%.com/") ~= nil
+		and source:lower():match("%.webm([%?].*)?$") ~= nil
+end
+
+local function ResolveVideoSource(source, onReady)
+	if source == nil or source == "" then return "" end
+	if type(source) ~= "string" then return source end
+	if source:match("^rbxassetid://%d+$") or source:match("^%d+$") then
+		return source:match("^%d+$") and ("rbxassetid://" .. source) or source
+	end
+	if not IsRawGitHubWebM(source) then return "" end
+	if VideoAssetCache[source] then return VideoAssetCache[source] end
+
+	if onReady then
+		task.spawn(function()
+			local result = ""
+			if fn_customasset and fn_writefile and EnsureVideoFolder() then
+				local path = VideoAssetPath(source)
+				local exists = false
+				if fn_isfile then pcall(function() exists = fn_isfile(path) end) end
+				if not exists then
+					local ok, body = pcall(function() return game:HttpGet(source) end)
+					if ok and type(body) == "string" and #body > 64 then
+						pcall(fn_writefile, path, body)
+					end
+				end
+				local ok, asset = pcall(fn_customasset, path)
+				if ok and asset then result = asset end
+			end
+			VideoAssetCache[source] = result
+			pcall(onReady, result)
+		end)
+	end
+	return ""
+end
+
+local function SetVideoSource(video, source, onReady)
+	if not video then return end
+	local initial = ResolveVideoSource(source, function(asset)
+		if video.Parent and asset ~= "" then
+			video.Video = asset
+			if onReady then pcall(onReady, asset) end
+		end
+	end)
+	video.Video = initial
+	if initial ~= "" and onReady then
+		task.defer(onReady, initial)
+	end
+end
+
+local function AddBackgroundMedia(parent, janitor, imageSource, videoSource, imageTransparency, videoTransparency, videoLooped)
+	local media = {
+		Image = nil,
+		Video = nil,
+		ImageTransparency = math.clamp(tonumber(imageTransparency) or 0.72, 0, 1),
+		VideoTransparency = math.clamp(tonumber(videoTransparency) or 0.72, 0, 1),
+	}
+
+	local function configureCommon(instance)
+		instance.AnchorPoint = Vector2.new(0.5, 0.5)
+		instance.Position = UDim2.fromScale(0.5, 0.5)
+		instance.Size = UDim2.fromScale(1, 1)
+		instance.BorderSizePixel = 0
+		instance.ZIndex = Z.Window
+		instance.Parent = parent
+		Corner(instance, NullUI.Theme.CornerRadius)
+		janitor:Add(instance)
+	end
+
+	if videoSource and videoSource ~= "" then
+		local video = Instance.new("VideoFrame")
+		video.Name = "BackgroundVideo"
+		video.BackgroundColor3 = Color3.new(0, 0, 0)
+		video.BackgroundTransparency = 1
+		video.Looped = videoLooped ~= false
+		video.Volume = 0
+		video.Visible = false
+		configureCommon(video)
+		local ratio = Instance.new("UIAspectRatioConstraint")
+		ratio.AspectRatio = 16 / 9
+		ratio.DominantAxis = Enum.DominantAxis.Width
+		ratio.Parent = video
+		SetVideoSource(video, videoSource, function()
+			if video.Parent then
+				video.Visible = true
+				pcall(function() video.VideoTransparency = media.VideoTransparency end)
+				video.Playing = true
+			end
+		end)
+		media.Video = video
+		return media
+	end
+
+	if imageSource and imageSource ~= "" then
+		local image = Instance.new("ImageLabel")
+		image.Name = "BackgroundImage"
+		image.BackgroundTransparency = 1
+		image.ImageTransparency = 1
+		image.ScaleType = Enum.ScaleType.Fit
+		image.Visible = true
+		configureCommon(image)
+		SetImageSource(image, imageSource)
+		media.Image = image
+	end
+
+	return media
+end
+
 function NullUI:PreloadIcons(sources)
 	for _, src in ipairs(sources or { "Lucide" }) do
 		task.spawn(LoadIconSource, src)
@@ -2132,118 +2260,25 @@ Window.__index = Window
 local Tab = {}
 Tab.__index = Tab
 
-local function AddGlowLineAnimation(parent, janitor, enabled, radius)
-	if enabled ~= true then return end
-
-	local white = Color3.fromRGB(255, 255, 255)
-	local cornerRadius = radius or 10
-	if not parent:FindFirstChildOfClass("UICorner") then
-		Corner(parent, cornerRadius)
-	end
-
-	local baseStroke = Instance.new("UIStroke")
-	baseStroke.Name = "GlowAnimationBase"
-	baseStroke.Color = white
-	baseStroke.Thickness = 1
-	baseStroke.Transparency = 0.72
-	baseStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	baseStroke.LineJoinMode = Enum.LineJoinMode.Round
-	baseStroke.Parent = parent
-
-	local bloomStroke = Instance.new("UIStroke")
-	bloomStroke.Name = "GlowAnimationBloom"
-	bloomStroke.Color = white
-	bloomStroke.Thickness = 4
-	bloomStroke.Transparency = 0.84
-	bloomStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	bloomStroke.LineJoinMode = Enum.LineJoinMode.Round
-	bloomStroke.Parent = parent
-
-	local layer = Instance.new("Frame")
-	layer.Name = "GlowAnimation"
-	layer.BackgroundTransparency = 1
-	layer.BorderSizePixel = 0
-	layer.Size = UDim2.fromScale(1, 1)
-	layer.ZIndex = (parent.ZIndex or 1) + 5
-	layer.ClipsDescendants = true
-	layer.Active = false
-	layer.Parent = parent
-	Corner(layer, cornerRadius)
-
-	local segments = {}
-	local function addSegment(name, size, startPosition, rotation)
-		local line = Instance.new("Frame")
-		line.Name = name
-		line.BackgroundColor3 = white
-		line.BackgroundTransparency = 0.04
-		line.BorderSizePixel = 0
-		line.Size = size
-		line.Position = startPosition
-		line.ZIndex = layer.ZIndex + 1
-		line.Parent = layer
-		Corner(line, 2)
-
-		local gradient = Instance.new("UIGradient")
-		gradient.Color = ColorSequence.new(white)
-		gradient.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.2, 0.2),
-			NumberSequenceKeypoint.new(0.5, 0),
-			NumberSequenceKeypoint.new(0.8, 0.2),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		gradient.Rotation = rotation or 0
-		gradient.Parent = line
-		table.insert(segments, { Line = line, Start = startPosition })
-		return line
-	end
-
-	local top = addSegment("Top", UDim2.new(0.34, 0, 0, 2), UDim2.new(-0.34, 0, 0, 0), 0)
-	local right = addSegment("Right", UDim2.new(0, 2, 0.34, 0), UDim2.new(1, -2, -0.34, 0), 90)
-	local bottom = addSegment("Bottom", UDim2.new(0.34, 0, 0, 2), UDim2.new(1, 0, 1, -2), 0)
-	local left = addSegment("Left", UDim2.new(0, 2, 0.34, 0), UDim2.new(0, 0, 1, 0), 90)
-
-	local running = true
-	local activeTween
-	janitor:Add(function()
-		running = false
-		if activeTween then activeTween:Cancel() end
-		if baseStroke then baseStroke:Destroy() end
-		if bloomStroke then bloomStroke:Destroy() end
-		if layer then layer:Destroy() end
-	end)
-
-	task.spawn(function()
-		local duration = 0.72
-		local targets = {
-			{ Line = top, Position = UDim2.new(1, 0, 0, 0) },
-			{ Line = right, Position = UDim2.new(1, -2, 1, 0) },
-			{ Line = bottom, Position = UDim2.new(-0.34, 0, 1, -2) },
-			{ Line = left, Position = UDim2.new(0, 0, -0.34, 0) },
-		}
-		while running and parent.Parent do
-			for _, segment in ipairs(targets) do
-				if not running or not parent.Parent then break end
-				local startPosition
-				for _, entry in ipairs(segments) do
-					if entry.Line == segment.Line then
-						startPosition = entry.Start
-						break
-					end
-				end
-				segment.Line.Position = startPosition
-				activeTween = Tween(segment.Line, { Position = segment.Position }, duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-				activeTween.Completed:Wait()
-				activeTween = nil
-			end
-		end
-	end)
-end
-
 function NullUI:CreateWindow(opts)
 	opts = opts or {}
 	local useBlur = opts.BlurBackground
 	if useBlur == nil then useBlur = opts.UseBlur ~= false end
+	local backgroundSpec = opts.Background
+	local backgroundConfig = type(backgroundSpec) == "table" and backgroundSpec or {}
+	local backgroundImageSource = opts.BackgroundImage or opts.ImageBackground or backgroundConfig.Image
+	local backgroundVideoSource = opts.BackgroundVideo or opts.VideoBackground or backgroundConfig.Video
+	if type(backgroundSpec) == "string" and not backgroundImageSource and not backgroundVideoSource then
+		backgroundImageSource = backgroundSpec
+	end
+	local backgroundImageTransparency = opts.BackgroundImageTransparency
+		or opts.ImageBackgroundTransparency
+		or backgroundConfig.ImageTransparency
+	local backgroundVideoTransparency = opts.BackgroundVideoTransparency
+		or opts.VideoBackgroundTransparency
+		or backgroundConfig.VideoTransparency
+	local backgroundVideoLooped = opts.BackgroundVideoLooped
+	if backgroundVideoLooped == nil then backgroundVideoLooped = backgroundConfig.Looped end
 	local size = opts.Size or UDim2.fromOffset(605, 405)
 
 	if IsMobileDevice then
@@ -2276,6 +2311,15 @@ function NullUI:CreateWindow(opts)
 	Corner(main, NullUI.Theme.CornerRadius)
 	Stroke(main, Color3.new(1, 1, 1), 1, 0.92)
 	GlassLayer(main, NullUI.Theme.CornerRadius, 0.985)
+	local backgroundMedia = AddBackgroundMedia(
+		main,
+		jan,
+		backgroundImageSource,
+		backgroundVideoSource,
+		backgroundImageTransparency,
+		backgroundVideoTransparency,
+		backgroundVideoLooped
+	)
 
 	local glowInfo = type(opts.Glow) == "table" and opts.Glow or { Enabled = opts.Glow == true }
 	local glowFrame = Instance.new("ImageLabel")
@@ -2365,8 +2409,8 @@ function NullUI:CreateWindow(opts)
 		local windowIcon = Instance.new("ImageLabel")
 		windowIcon.Name = "WindowIcon"
 		windowIcon.BackgroundTransparency = 1
-		windowIcon.Image = ResolveIcon(opts.Icon)
 		windowIcon.ImageColor3 = NullUI.Theme.Text
+		SetImageSource(windowIcon, opts.Icon)
 		windowIcon.Size = UDim2.fromOffset(20, 20)
 		windowIcon.AnchorPoint = Vector2.new(0, 0.5)
 		windowIcon.Position = UDim2.new(0, titleStartX, 0.5, 0)
@@ -2602,8 +2646,6 @@ function NullUI:CreateWindow(opts)
 		sidebarHitbox.ZIndex = Z.Content + 4
 		sidebarHitbox.Parent = sidebarPanel
 		jan:Add(sidebarHitbox.MouseButton1Click:Connect(openViewer))
-			AddGlowLineAnimation(sidebarImage, jan, sidebarInfo.GlowAnimation == true, 10)
-			AddGlowLineAnimation(viewerImage, jan, sidebarInfo.GlowAnimation == true, 8)
 		jan:Add(viewerBackdrop.MouseButton1Click:Connect(closeViewer))
 		jan:Add(viewerImage.MouseButton1Click:Connect(closeViewer))
 		jan:Add(viewerCard.InputBegan:Connect(function(input)
@@ -2715,6 +2757,10 @@ function NullUI:CreateWindow(opts)
 		_glowFrame      = glowFrame,
 		_glowInfo       = glowInfo,
 		_glowTargetTransparency = glowTransparency,
+		_backgroundImage = backgroundMedia.Image,
+		_backgroundVideo = backgroundMedia.Video,
+		_backgroundImageTransparency = backgroundMedia.ImageTransparency,
+		_backgroundVideoTransparency = backgroundMedia.VideoTransparency,
 
 		_defaultTabName = opts.DefaultTab,
 		_tabChangeListeners = {},
@@ -2817,7 +2863,8 @@ function NullUI:CreateWindow(opts)
 	closedToggle.BorderSizePixel = 0
 	closedToggle.Size = UDim2.fromOffset(34, 34)
 	closedToggle.Position = UDim2.fromOffset(18, 18)
-	closedToggle.Image = ResolveIcon("home")
+	local homeIcon = opts.HomeIcon or opts.ClosedIcon or "Lucide:house"
+	SetImageSource(closedToggle, homeIcon)
 	closedToggle.ImageColor3 = Color3.new(1, 1, 1)
 	closedToggle.ImageTransparency = 0.05
 	closedToggle.AutoButtonColor = false
@@ -2839,7 +2886,19 @@ function NullUI:CreateWindow(opts)
 
 	main.BackgroundTransparency = 1
 	glowFrame.ImageTransparency = 1
+	if self._backgroundImage then self._backgroundImage.ImageTransparency = 1 end
+	if self._backgroundVideo then
+		self._backgroundVideo.Visible = false
+		pcall(function() self._backgroundVideo.VideoTransparency = 1 end)
+	end
 	Tween(main, { BackgroundTransparency = 0.15 }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+	if self._backgroundImage then
+		Tween(self._backgroundImage, { ImageTransparency = self._backgroundImageTransparency }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+	end
+	if self._backgroundVideo then
+		self._backgroundVideo.Visible = true
+		pcall(function() self._backgroundVideo.VideoTransparency = self._backgroundVideoTransparency end)
+	end
 	if glowInfo.Enabled == true then
 		Tween(glowFrame, { ImageTransparency = glowTransparency }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 	end
@@ -2904,6 +2963,13 @@ function Window:Destroy()
 		if self._glowFrame then
 			Tween(self._glowFrame, { ImageTransparency = 1 }, WINDOW_FADE_OUT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 		end
+		if self._backgroundImage then
+			Tween(self._backgroundImage, { ImageTransparency = 1 }, WINDOW_FADE_OUT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		end
+		if self._backgroundVideo then
+			pcall(function() self._backgroundVideo.VideoTransparency = 1 end)
+			self._backgroundVideo.Visible = false
+		end
 
 		task.delay(WINDOW_FADE_OUT, function()
 
@@ -2946,6 +3012,13 @@ function Window:Close()
 	if self._glowFrame then
 		Tween(self._glowFrame, { ImageTransparency = 1 }, WINDOW_FADE_OUT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 	end
+	if self._backgroundImage then
+		Tween(self._backgroundImage, { ImageTransparency = 1 }, WINDOW_FADE_OUT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+	end
+	if self._backgroundVideo then
+		pcall(function() self._backgroundVideo.VideoTransparency = 1 end)
+		self._backgroundVideo.Visible = false
+	end
 
 	task.delay(WINDOW_FADE_OUT, function()
 			if self._glowFrame and self._state == "closed" then self._glowFrame.Visible = false end
@@ -2968,6 +3041,11 @@ function Window:Open()
 		self._glowFrame.Visible = true
 		self._glowFrame.ImageTransparency = 1
 	end
+	if self._backgroundImage then self._backgroundImage.ImageTransparency = 1 end
+	if self._backgroundVideo then
+		self._backgroundVideo.Visible = true
+		pcall(function() self._backgroundVideo.VideoTransparency = 1 end)
+	end
 
 	local gui = self._gui
 	gui.Visible = true
@@ -2984,6 +3062,12 @@ function Window:Open()
 	}, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 	if self._glowFrame and self._glowInfo.Enabled == true then
 		Tween(self._glowFrame, { ImageTransparency = self._glowTargetTransparency }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+	end
+	if self._backgroundImage then
+		Tween(self._backgroundImage, { ImageTransparency = self._backgroundImageTransparency }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+	end
+	if self._backgroundVideo then
+		pcall(function() self._backgroundVideo.VideoTransparency = self._backgroundVideoTransparency end)
 	end
 
 	task.delay(WINDOW_FADE_IN, function()

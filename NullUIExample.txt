@@ -13,9 +13,18 @@ local Window = NullUI:CreateWindow({
         Thickness = 2,
         Transparency = 0.45,
     },
-	    SidebarPanel = true,
-	    GlowAnimation = true,
-	    SidebarURL = "rbxassetid://6031075931",
+    SidebarPanel = true,
+    HomeIcon = "Lucide:house",
+    SidebarURL = "rbxassetid://6031075931",
+    -- Icon also accepts a Roblox asset id or supported HTTPS image URL.
+    -- Icon = "https://your-cdn.example/window-icon.png",
+    -- Choose one background alternative; images use ScaleType.Fit and do not stretch.
+    -- BackgroundImage = "https://your-cdn.example/window-background.jpg",
+    -- BackgroundImageTransparency = 0.82,
+    -- BackgroundVideo accepts raw GitHub HTTPS .webm only and needs getcustomasset support.
+    -- BackgroundVideo = "https://raw.githubusercontent.com/your-user/your-repo/main/background.webm",
+    -- BackgroundVideoTransparency = 0.82,
+    -- BackgroundVideoLooped = true,
     Description = "this is example only",
     Icon = "home",
     ToggleKeybind = Enum.KeyCode.RightShift,
