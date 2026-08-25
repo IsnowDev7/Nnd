@@ -923,12 +923,18 @@ local function SetVideoSource(video, source, onReady)
 	end
 end
 
-local function AddBackgroundMedia(parent, janitor, imageSource, videoSource, imageTransparency, videoTransparency, videoLooped)
+local function AddBackgroundMedia(parent, janitor, imageSource, videoSource, imageTransparency, videoTransparency, videoLooped, videoPlaybackSpeed, videoVolume, videoTimePosition, fallbackImageSource, videoAutoplay, videoMuted)
 	local media = {
 		Image = nil,
 		Video = nil,
 		ImageTransparency = math.clamp(tonumber(imageTransparency) or 0.72, 0, 1),
 		VideoTransparency = math.clamp(tonumber(videoTransparency) or 0.72, 0, 1),
+		VideoPlaybackSpeed = math.clamp(tonumber(videoPlaybackSpeed) or 1, 0.05, 4),
+		VideoVolume = math.clamp(tonumber(videoVolume) or 0, 0, 1),
+		VideoTimePosition = math.max(tonumber(videoTimePosition) or 0, 0),
+		VideoAutoplay = videoAutoplay ~= false,
+		VideoMuted = videoMuted ~= false,
+		VideoReady = false,
 	}
 
 	local function configureCommon(instance)
@@ -942,13 +948,27 @@ local function AddBackgroundMedia(parent, janitor, imageSource, videoSource, ima
 		janitor:Add(instance)
 	end
 
+	local fallbackSource = fallbackImageSource or imageSource
+	if fallbackSource and fallbackSource ~= "" then
+		local image = Instance.new("ImageLabel")
+		image.Name = "BackgroundImage"
+		image.BackgroundTransparency = 1
+		image.ImageTransparency = 1
+		image.ScaleType = Enum.ScaleType.Fit
+		image.Visible = true
+		configureCommon(image)
+		SetImageSource(image, fallbackSource)
+		media.Image = image
+	end
+
 	if videoSource and videoSource ~= "" then
 		local video = Instance.new("VideoFrame")
 		video.Name = "BackgroundVideo"
 		video.BackgroundColor3 = Color3.new(0, 0, 0)
 		video.BackgroundTransparency = 1
 		video.Looped = videoLooped ~= false
-		video.Volume = 0
+		pcall(function() video.PlaybackSpeed = media.VideoPlaybackSpeed end)
+		pcall(function() video.Volume = media.VideoMuted and 0 or media.VideoVolume end)
 		video.Visible = false
 		configureCommon(video)
 		local ratio = Instance.new("UIAspectRatioConstraint")
@@ -957,25 +977,18 @@ local function AddBackgroundMedia(parent, janitor, imageSource, videoSource, ima
 		ratio.Parent = video
 		SetVideoSource(video, videoSource, function()
 			if video.Parent then
+				media.VideoReady = true
+				video:SetAttribute("NullUIVideoReady", true)
 				video.Visible = true
+				if media.Image then media.Image.Visible = false end
+				pcall(function() video.TimePosition = media.VideoTimePosition end)
 				pcall(function() video.VideoTransparency = media.VideoTransparency end)
-				video.Playing = true
+				pcall(function() video.Playing = media.VideoAutoplay end)
 			end
 		end)
 		media.Video = video
-		return media
-	end
-
-	if imageSource and imageSource ~= "" then
-		local image = Instance.new("ImageLabel")
-		image.Name = "BackgroundImage"
-		image.BackgroundTransparency = 1
-		image.ImageTransparency = 1
-		image.ScaleType = Enum.ScaleType.Fit
-		image.Visible = true
-		configureCommon(image)
-		SetImageSource(image, imageSource)
-		media.Image = image
+	elseif media.Image then
+		media.Image.Visible = true
 	end
 
 	return media
@@ -2279,6 +2292,20 @@ function NullUI:CreateWindow(opts)
 		or backgroundConfig.VideoTransparency
 	local backgroundVideoLooped = opts.BackgroundVideoLooped
 	if backgroundVideoLooped == nil then backgroundVideoLooped = backgroundConfig.Looped end
+	local backgroundVideoPlaybackSpeed = opts.BackgroundVideoPlaybackSpeed
+		or backgroundConfig.PlaybackSpeed
+	local backgroundVideoVolume = opts.BackgroundVideoVolume
+		or backgroundConfig.Volume
+	local backgroundVideoTimePosition = opts.BackgroundVideoTimePosition
+		or backgroundConfig.TimePosition
+	local backgroundVideoAutoplay = opts.BackgroundVideoAutoplay
+	if backgroundVideoAutoplay == nil then backgroundVideoAutoplay = backgroundConfig.Autoplay end
+	if backgroundVideoAutoplay == nil then backgroundVideoAutoplay = true end
+	local backgroundVideoMuted = opts.BackgroundVideoMuted
+	if backgroundVideoMuted == nil then backgroundVideoMuted = backgroundConfig.Muted end
+	if backgroundVideoMuted == nil then backgroundVideoMuted = true end
+	local backgroundFallbackImageSource = opts.BackgroundVideoFallbackImage
+		or backgroundConfig.FallbackImage
 	local size = opts.Size or UDim2.fromOffset(605, 405)
 
 	if IsMobileDevice then
@@ -2318,7 +2345,13 @@ function NullUI:CreateWindow(opts)
 		backgroundVideoSource,
 		backgroundImageTransparency,
 		backgroundVideoTransparency,
-		backgroundVideoLooped
+		backgroundVideoLooped,
+		backgroundVideoPlaybackSpeed,
+		backgroundVideoVolume,
+		backgroundVideoTimePosition,
+		backgroundFallbackImageSource,
+		backgroundVideoAutoplay,
+		backgroundVideoMuted
 	)
 
 	local glowInfo = type(opts.Glow) == "table" and opts.Glow or { Enabled = opts.Glow == true }
@@ -2895,10 +2928,10 @@ function NullUI:CreateWindow(opts)
 	if self._backgroundImage then
 		Tween(self._backgroundImage, { ImageTransparency = self._backgroundImageTransparency }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 	end
-	if self._backgroundVideo then
-		self._backgroundVideo.Visible = true
-		pcall(function() self._backgroundVideo.VideoTransparency = self._backgroundVideoTransparency end)
-	end
+		if self._backgroundVideo then
+			self._backgroundVideo.Visible = self._backgroundVideo:GetAttribute("NullUIVideoReady") == true
+			pcall(function() self._backgroundVideo.VideoTransparency = self._backgroundVideoTransparency end)
+		end
 	if glowInfo.Enabled == true then
 		Tween(glowFrame, { ImageTransparency = glowTransparency }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 	end
@@ -3043,7 +3076,7 @@ function Window:Open()
 	end
 	if self._backgroundImage then self._backgroundImage.ImageTransparency = 1 end
 	if self._backgroundVideo then
-		self._backgroundVideo.Visible = true
+		self._backgroundVideo.Visible = self._backgroundVideo:GetAttribute("NullUIVideoReady") == true
 		pcall(function() self._backgroundVideo.VideoTransparency = 1 end)
 	end
 
