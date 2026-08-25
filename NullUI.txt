@@ -2401,16 +2401,13 @@ function NullUI:CreateWindow(opts)
 		viewerCard.Active = true
 		viewerCard.AnchorPoint = Vector2.new(0.5, 0.5)
 		viewerCard.Position = UDim2.fromScale(0.5, 0.5)
-		viewerCard.Size = UDim2.new(0.62, 0, 0, 520)
-		viewerCard.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
-		viewerCard.BackgroundTransparency = 0.04
+		viewerCard.Size = UDim2.fromOffset(680, 430)
+		viewerCard.BackgroundTransparency = 1
 		viewerCard.BorderSizePixel = 0
-		viewerCard.ClipsDescendants = true
+		viewerCard.ClipsDescendants = false
 		viewerCard.ZIndex = Z.ModalTop
 		viewerCard.Visible = false
 		viewerCard.Parent = root
-		Corner(viewerCard, 12)
-		Stroke(viewerCard, Color3.new(1, 1, 1), 1, 0.78)
 
 		local viewerImage = Instance.new("ImageButton")
 		viewerImage.Name = "Image"
@@ -2419,8 +2416,8 @@ function NullUI:CreateWindow(opts)
 		viewerImage.BackgroundTransparency = 0
 		viewerImage.BorderSizePixel = 0
 		viewerImage.AnchorPoint = Vector2.new(0.5, 0)
-		viewerImage.Position = UDim2.new(0.5, 0, 0, 16)
-		viewerImage.Size = UDim2.new(0.9, 0, 0, 0)
+		viewerImage.Position = UDim2.new(0.5, 0, 0, 12)
+		viewerImage.Size = UDim2.fromOffset(640, 360)
 		viewerImage.ScaleType = Enum.ScaleType.Fit
 		viewerImage.ZIndex = Z.ModalTop + 1
 		viewerImage.Parent = viewerCard
@@ -2441,7 +2438,7 @@ function NullUI:CreateWindow(opts)
 		viewerTitle.TextXAlignment = Enum.TextXAlignment.Center
 		viewerTitle.TextTruncate = Enum.TextTruncate.AtEnd
 		viewerTitle.AnchorPoint = Vector2.new(0.5, 0)
-		viewerTitle.Position = UDim2.new(0.5, 0, 1, -55)
+		viewerTitle.Position = UDim2.new(0.5, 0, 1, -50)
 		viewerTitle.Size = UDim2.new(1, -24, 0, 18)
 		viewerTitle.ZIndex = Z.ModalTop + 1
 		viewerTitle.Parent = viewerCard
@@ -2456,7 +2453,7 @@ function NullUI:CreateWindow(opts)
 		viewerDescription.TextXAlignment = Enum.TextXAlignment.Center
 		viewerDescription.TextTruncate = Enum.TextTruncate.AtEnd
 		viewerDescription.AnchorPoint = Vector2.new(0.5, 0)
-		viewerDescription.Position = UDim2.new(0.5, 0, 1, -31)
+		viewerDescription.Position = UDim2.new(0.5, 0, 1, -27)
 		viewerDescription.Size = UDim2.new(1, -24, 0, 15)
 		viewerDescription.ZIndex = Z.ModalTop + 1
 		viewerDescription.Parent = viewerCard
@@ -2481,11 +2478,11 @@ function NullUI:CreateWindow(opts)
 			viewerBackdrop.Visible = true
 			viewerCard.Visible = true
 			viewerBackdrop.BackgroundTransparency = 1
-					viewerCard.BackgroundTransparency = 1
-		viewerImage.ImageTransparency = 1
+			viewerCard.BackgroundTransparency = 1
+			viewerImage.ImageTransparency = 1
 
-			Tween(viewerBackdrop, { BackgroundTransparency = 0.3 }, 0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-			Tween(viewerCard, { BackgroundTransparency = 0.04 }, 0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+			Tween(viewerBackdrop, { BackgroundTransparency = 0.52 }, 0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+			Tween(viewerCard, { BackgroundTransparency = 1 }, 0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 			Tween(viewerImage, { ImageTransparency = 0 }, 0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 		end
 
