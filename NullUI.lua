@@ -2588,11 +2588,6 @@ function NullUI:CreateWindow(opts)
 		Tween(resizeHandle, { ImageTransparency = 0.35 }, 0.12)
 	end))
 
-	Tween(main, { BackgroundTransparency = 0.15 }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-	if glowInfo.Enabled == true then
-		Tween(glowFrame, { ImageTransparency = glowTransparency }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-	end
-
 	local self = setmetatable({
 		_gui            = main,
 		_content        = content,
@@ -2661,9 +2656,7 @@ function NullUI:CreateWindow(opts)
 		self._acrylic = CreateWindowAcrylic(main)
 
 		jan:Add(self._acrylic)
-				VisibleWindows = VisibleWindows + 1
-		UpdateBlur(WINDOW_FADE_IN)
-	end
+					end
 
 	jan:Add(closeBtn.MouseButton1Click:Connect(function()
 		NullUI:Confirm({
@@ -2737,6 +2730,21 @@ function NullUI:CreateWindow(opts)
 		self:Open()
 	end))
 	self._closedToggle = closedToggle
+
+	main.BackgroundTransparency = 1
+	glowFrame.ImageTransparency = 1
+	Tween(main, { BackgroundTransparency = 0.15 }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+	if glowInfo.Enabled == true then
+		Tween(glowFrame, { ImageTransparency = glowTransparency }, WINDOW_FADE_IN, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+	end
+	if self._useBlur then
+		VisibleWindows = VisibleWindows + 1
+		task.defer(function()
+			if not self._destroyed and self._state == "open" then
+				UpdateBlur(WINDOW_FADE_IN)
+			end
+		end)
+	end
 
 	if toggleKey then
 		NullUI:Notify({
