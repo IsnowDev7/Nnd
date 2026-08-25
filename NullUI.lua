@@ -2132,27 +2132,50 @@ Window.__index = Window
 local Tab = {}
 Tab.__index = Tab
 
-local function AddGlowLineAnimation(parent, janitor, enabled, zIndex, radius)
+local function AddGlowLineAnimation(parent, janitor, enabled, radius)
 	if enabled ~= true then return end
+
+	local white = Color3.fromRGB(255, 255, 255)
+	local cornerRadius = radius or 10
+	if not parent:FindFirstChildOfClass("UICorner") then
+		Corner(parent, cornerRadius)
+	end
+
+	local baseStroke = Instance.new("UIStroke")
+	baseStroke.Name = "GlowAnimationBase"
+	baseStroke.Color = white
+	baseStroke.Thickness = 1
+	baseStroke.Transparency = 0.72
+	baseStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	baseStroke.LineJoinMode = Enum.LineJoinMode.Round
+	baseStroke.Parent = parent
+
+	local bloomStroke = Instance.new("UIStroke")
+	bloomStroke.Name = "GlowAnimationBloom"
+	bloomStroke.Color = white
+	bloomStroke.Thickness = 4
+	bloomStroke.Transparency = 0.84
+	bloomStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	bloomStroke.LineJoinMode = Enum.LineJoinMode.Round
+	bloomStroke.Parent = parent
 
 	local layer = Instance.new("Frame")
 	layer.Name = "GlowAnimation"
 	layer.BackgroundTransparency = 1
 	layer.BorderSizePixel = 0
 	layer.Size = UDim2.fromScale(1, 1)
-	layer.ZIndex = zIndex or ((parent.ZIndex or 1) + 5)
+	layer.ZIndex = (parent.ZIndex or 1) + 5
 	layer.ClipsDescendants = true
 	layer.Active = false
 	layer.Parent = parent
-	Corner(layer, radius or 10)
+	Corner(layer, cornerRadius)
 
-	local white = Color3.fromRGB(255, 255, 255)
 	local segments = {}
 	local function addSegment(name, size, startPosition, rotation)
 		local line = Instance.new("Frame")
 		line.Name = name
 		line.BackgroundColor3 = white
-		line.BackgroundTransparency = 0.08
+		line.BackgroundTransparency = 0.04
 		line.BorderSizePixel = 0
 		line.Size = size
 		line.Position = startPosition
@@ -2164,9 +2187,9 @@ local function AddGlowLineAnimation(parent, janitor, enabled, zIndex, radius)
 		gradient.Color = ColorSequence.new(white)
 		gradient.Transparency = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.16, 0.2),
+			NumberSequenceKeypoint.new(0.2, 0.2),
 			NumberSequenceKeypoint.new(0.5, 0),
-			NumberSequenceKeypoint.new(0.84, 0.2),
+			NumberSequenceKeypoint.new(0.8, 0.2),
 			NumberSequenceKeypoint.new(1, 1),
 		})
 		gradient.Rotation = rotation or 0
@@ -2175,66 +2198,41 @@ local function AddGlowLineAnimation(parent, janitor, enabled, zIndex, radius)
 		return line
 	end
 
-	local top = addSegment(
-		"Top",
-		UDim2.new(0.34, 0, 0, 2),
-		UDim2.new(-0.34, 0, 0, 0),
-		0
-	)
-	local right = addSegment(
-		"Right",
-		UDim2.new(0, 2, 0.34, 0),
-		UDim2.new(1, -2, -0.34, 0),
-		90
-	)
-	local bottom = addSegment(
-		"Bottom",
-		UDim2.new(0.34, 0, 0, 2),
-		UDim2.new(1, 0, 1, -2),
-		0
-	)
-	local left = addSegment(
-		"Left",
-		UDim2.new(0, 2, 0.34, 0),
-		UDim2.new(0, 0, 1, 0),
-		90
-	)
+	local top = addSegment("Top", UDim2.new(0.34, 0, 0, 2), UDim2.new(-0.34, 0, 0, 0), 0)
+	local right = addSegment("Right", UDim2.new(0, 2, 0.34, 0), UDim2.new(1, -2, -0.34, 0), 90)
+	local bottom = addSegment("Bottom", UDim2.new(0.34, 0, 0, 2), UDim2.new(1, 0, 1, -2), 0)
+	local left = addSegment("Left", UDim2.new(0, 2, 0.34, 0), UDim2.new(0, 0, 1, 0), 90)
 
 	local running = true
 	local activeTween
 	janitor:Add(function()
 		running = false
 		if activeTween then activeTween:Cancel() end
+		if baseStroke then baseStroke:Destroy() end
+		if bloomStroke then bloomStroke:Destroy() end
 		if layer then layer:Destroy() end
 	end)
 
 	task.spawn(function()
 		local duration = 0.72
-		while running and layer.Parent do
-			local targets = {
-				{ Line = top, Position = UDim2.new(1, 0, 0, 0) },
-				{ Line = right, Position = UDim2.new(1, -2, 1, 0) },
-				{ Line = bottom, Position = UDim2.new(-0.34, 0, 1, -2) },
-				{ Line = left, Position = UDim2.new(0, 0, -0.34, 0) },
-			}
+		local targets = {
+			{ Line = top, Position = UDim2.new(1, 0, 0, 0) },
+			{ Line = right, Position = UDim2.new(1, -2, 1, 0) },
+			{ Line = bottom, Position = UDim2.new(-0.34, 0, 1, -2) },
+			{ Line = left, Position = UDim2.new(0, 0, -0.34, 0) },
+		}
+		while running and parent.Parent do
 			for _, segment in ipairs(targets) do
-				if not running or not layer.Parent then break end
-				local line = segment.Line
+				if not running or not parent.Parent then break end
 				local startPosition
 				for _, entry in ipairs(segments) do
-					if entry.Line == line then
+					if entry.Line == segment.Line then
 						startPosition = entry.Start
 						break
 					end
 				end
-				line.Position = startPosition
-				activeTween = Tween(
-					line,
-					{ Position = segment.Position },
-					duration,
-					Enum.EasingStyle.Linear,
-					Enum.EasingDirection.Out
-				)
+				segment.Line.Position = startPosition
+				activeTween = Tween(segment.Line, { Position = segment.Position }, duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
 				activeTween.Completed:Wait()
 				activeTween = nil
 			end
@@ -2604,8 +2602,8 @@ function NullUI:CreateWindow(opts)
 		sidebarHitbox.ZIndex = Z.Content + 4
 		sidebarHitbox.Parent = sidebarPanel
 		jan:Add(sidebarHitbox.MouseButton1Click:Connect(openViewer))
-		AddGlowLineAnimation(sidebarPanel, jan, sidebarInfo.GlowAnimation == true, Z.Content + 6, 10)
-		AddGlowLineAnimation(viewerCard, jan, sidebarInfo.GlowAnimation == true, Z.ModalTop + 2, 8)
+			AddGlowLineAnimation(sidebarImage, jan, sidebarInfo.GlowAnimation == true, 10)
+			AddGlowLineAnimation(viewerImage, jan, sidebarInfo.GlowAnimation == true, 8)
 		jan:Add(viewerBackdrop.MouseButton1Click:Connect(closeViewer))
 		jan:Add(viewerImage.MouseButton1Click:Connect(closeViewer))
 		jan:Add(viewerCard.InputBegan:Connect(function(input)
