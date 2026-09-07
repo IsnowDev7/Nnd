@@ -1,0 +1,154 @@
+local IsnowUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/IsnowDev7/Nnd/main/IsnowUI.lua"))()
+
+local Window = IsnowUI:CreateWindow({
+    Title = "IsnowUI",
+    Description = "Native UI component showcase",
+    TabWidth = 105,
+    SizeUi = UDim2.fromOffset(520, 380),
+    Keybind = Enum.KeyCode.RightControl,
+    Icon = "rbxassetid://130008176530837",
+    Tags = {"NEW", "UI"}
+})
+
+local MainTab = Window:CreateTab({
+    "Main",
+    "rbxassetid://130008176530837"
+})
+
+local Components = MainTab:AddSection("Components", true)
+
+local Paragraph = Components:AddParagraph({
+    Title = "Paragraph",
+    Description = "This uses the native IsnowUI paragraph frame.",
+    AddText = "AddText can display statistics, status text, announcements, or any additional information.",
+    Toggle = {
+        Default = false,
+        Callback = function(Value)
+            print("Paragraph description toggle:", Value)
+        end
+    }
+})
+
+Components:AddParagraph({
+    Title = "Image Label",
+    Description = "Display an image inside the native paragraph component.",
+    Image = "rbxassetid://130008176530837",
+    ImageHeight = 110,
+    AddText = "The image is displayed inside the library's native frame."
+})
+
+Components:AddParagraph({
+    Title = "Code Frame",
+    Description = "Display code inside a native code frame.",
+    Code = "local message = 'Hello from IsnowUI'\nprint(message)",
+    CodeHeight = 78
+})
+
+Components:AddHoldButton({
+    Title = "Hold Button",
+    Description = "Hold the native button to activate the action.",
+    Text = "Hold",
+    Callback = function(IsHolding, Duration)
+        if IsHolding then
+            print("Hold started")
+        else
+            print("Hold released after", Duration, "seconds")
+        end
+    end
+})
+
+Components:AddToggle({
+    Title = "Native Toggle",
+    Description = "This is the existing IsnowUI toggle component.",
+    Default = false,
+    Callback = function(Value)
+        print("Native toggle:", Value)
+    end
+})
+
+Components:AddButton({
+    Title = "Native Button",
+    Description = "This is the existing IsnowUI button component.",
+    Callback = function()
+        IsnowUI:SetNotification({
+            Content = "Native button activated",
+            Delay = 3,
+            Time = 0.25
+        })
+    end
+})
+
+Components:AddInput({
+    Title = "Input",
+    Description = "Enter any text.",
+    Default = "",
+    Callback = function(Value)
+        print("Input:", Value)
+    end
+})
+
+Components:AddDropdown({
+    Title = "Dropdown",
+    Description = "Select one or more native options.",
+    Multi = false,
+    Options = {"Option 1", "Option 2", "Option 3"},
+    Default = {"Option 1"},
+    Callback = function(Value)
+        print("Dropdown selection:", table.concat(Value, ", "))
+    end
+})
+
+Components:AddSlider({
+    Title = "Slider",
+    Description = "Adjust a numeric value.",
+    Increment = 1,
+    Min = 0,
+    Max = 100,
+    Default = 50,
+    Callback = function(Value)
+        print("Slider value:", Value)
+    end
+})
+
+Components:AddReadMe({
+    Title = "Read Me",
+    Content = "IsnowUI uses its native frames, spacing, corners, colors, and component animations. The window also fades and blurs when opened, minimized, restored, or closed.",
+    Style = "Accordion",
+    Open = true
+})
+
+local StatusTab = Window:CreateTab({"Status"})
+local StatusSection = StatusTab:AddSection("Runtime", true)
+
+local StatusParagraph = StatusSection:AddParagraph({
+    Title = "Runtime Status",
+    Description = "Update paragraph content while the script is running.",
+    AddText = "Waiting..."
+})
+
+StatusSection:AddButton({
+    Title = "Update Paragraph",
+    Description = "Change the paragraph's text at runtime.",
+    Callback = function()
+        StatusParagraph:SetDescription("The description was updated successfully.")
+        StatusParagraph:SetText("Updated at: " .. os.date("%X"))
+    end
+})
+
+StatusSection:AddButton({
+    Title = "Enable Paragraph Toggle",
+    Description = "Set the paragraph toggle from code.",
+    Callback = function()
+        if StatusParagraph.Toggle then
+            StatusParagraph.Toggle:Set(true)
+        end
+    end
+})
+
+return Window
+
+-- Runtime methods available from the returned Paragraph object:
+-- Paragraph:Set({Title = "New title", Description = "New description", AddText = "New text"})
+-- Paragraph:SetDescription("Changed description")
+-- Paragraph:SetText("Changed AddText")
+-- Paragraph.Toggle:Set(true)
