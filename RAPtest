@@ -1,1 +1,1 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/IsnowDev7/IsnowDev/refs/heads/main/RideAPetPremium.lua.txt"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/IsnowDev7/IsnowDev/refs/heads/main/obfuscated.luau%20(1).txt"))()
