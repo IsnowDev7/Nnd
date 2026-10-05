@@ -1,1 +1,1 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/IsnowDev7/Nnd/64fae251a98931fcd7763cdd9ac0a36652bca01a/out.lua%20(3).txt"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/IsnowDev7/Nnd/a45f45f1b43c444727d2bac51fe1219a34147a68/obfuscated.luau%20(5).txt"))()
