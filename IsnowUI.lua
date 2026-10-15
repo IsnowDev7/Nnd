@@ -112,36 +112,26 @@ local function MakeDraggable(topbar, object)
 end
 
 local function CircleClick(Button, X, Y)
-	task.spawn(function()
-		Button.ClipsDescendants = true
-		local Circle = Instance.new("ImageLabel")
-		Circle.Image = ""
-		Circle.ImageColor3 = Color3.fromRGB(80, 80, 80)
-		Circle.ImageTransparency = 0.9
-		Circle.BackgroundTransparency = 1
-		Circle.ZIndex = 10
-		Circle.Name = "Circle"
-		Circle.Parent = Button
-
-		local NewX = X - Button.AbsolutePosition.X
-		local NewY = Y - Button.AbsolutePosition.Y
-		Circle.Position = UDim2.new(0, NewX, 0, NewY)
-
-		local Size = math.max(Button.AbsoluteSize.X, Button.AbsoluteSize.Y) * 1.5
-		local Info = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		local Tween = TweenService:Create(Circle, Info, {
-			Size = UDim2.new(0, Size, 0, Size),
-			Position = UDim2.new(0.5, -Size/2, 0.5, -Size/2)
-		})
-		Tween:Play()
-		Tween.Completed:Connect(function()
-			for i = 1, 10 do
-				Circle.ImageTransparency = Circle.ImageTransparency + 0.01
-				task.wait(0.05)
-			end
-			Circle:Destroy()
-		end)
-	end)
+	if not Button or not Button.Parent then return end
+	Button.ClipsDescendants = true
+	local Circle = Instance.new("Frame")
+	Circle.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+	Circle.BackgroundTransparency = 0.1
+	Circle.BorderSizePixel = 0
+	Circle.ZIndex = 10
+	Circle.Name = "Circle"
+	Circle.Parent = Button
+	local NewX = X - Button.AbsolutePosition.X
+	local NewY = Y - Button.AbsolutePosition.Y
+	Circle.Position = UDim2.new(0, NewX, 0, NewY)
+	local Size = math.max(Button.AbsoluteSize.X, Button.AbsoluteSize.Y) * 1.5
+	local Tween = TweenService:Create(Circle, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, Size, 0, Size),
+		Position = UDim2.new(0.5, -Size / 2, 0.5, -Size / 2),
+		BackgroundTransparency = 1
+	})
+	Tween:Play()
+	Tween.Completed:Connect(function() if Circle and Circle.Parent then Circle:Destroy() end end)
 end
 
 local function BuildFadeState(Root)
@@ -833,6 +823,7 @@ function IsnowUI:CreateWindow(Config)
 		ClearSearchPopup()
 	end
 
+	local SearchHoverTweenInfo = TweenInfo.new(0.12)
 	local function RunSearch(Query)
 		Query = string.lower(Query)
 		HideSearchPopup()
@@ -878,8 +869,8 @@ function IsnowUI:CreateWindow(Config)
 				BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 1,
 				BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0), ZIndex = Row.ZIndex - 1, Name = "RowHighlight"
 			}, Row)
-			Row.MouseEnter:Connect(function() TweenService:Create(HL, TweenInfo.new(0.12), {BackgroundTransparency = 0.94}):Play() end)
-			Row.MouseLeave:Connect(function() TweenService:Create(HL, TweenInfo.new(0.12), {BackgroundTransparency = 1}):Play() end)
+			Row.MouseEnter:Connect(function() TweenService:Create(HL, SearchHoverTweenInfo, {BackgroundTransparency = 0.94}):Play() end)
+			Row.MouseLeave:Connect(function() TweenService:Create(HL, SearchHoverTweenInfo, {BackgroundTransparency = 1}):Play() end)
 			Row.Activated:Connect(function()
 				SearchBox.Text = ""; HideSearchPopup()
 				if Entry.SelectTab then Entry.SelectTab() end
@@ -896,7 +887,15 @@ function IsnowUI:CreateWindow(Config)
 		SearchPopup.Visible = true
 	end
 
-		SearchBox:GetPropertyChangedSignal("Text"):Connect(function() RunSearch(SearchBox.Text) end)
+		local SearchQueued = false
+		SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+			if SearchQueued then return end
+			SearchQueued = true
+			task.defer(function()
+				SearchQueued = false
+				if SearchBox and SearchBox.Parent then RunSearch(SearchBox.Text) end
+			end)
+		end)
 
 		local WindowFadeState
 		local WindowBlur
@@ -1591,12 +1590,12 @@ function IsnowUI:CreateWindow(Config)
 					BorderSizePixel = 0, Position = UDim2.new(0, 10, 0, 23), Size = UDim2.new(1, -100, 0, 12), Name = "ButtonContent"
 				}, B)
 				local function UpdateB()
-					local h = 12 + (12 * (BC.TextBounds.X // BC.AbsoluteSize.X))
+					local h = 12 + (12 * (BC.TextBounds.X // math.max(BC.AbsoluteSize.X, 1)))
 					BC.Size = UDim2.new(1, -100, 0, h); B.Size = UDim2.new(1, 0, 0, BC.AbsoluteSize.Y + 33)
 				end
 				BC.TextWrapped = true; UpdateB()
 				BC:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-					BC.TextWrapped = false; UpdateB(); BC.TextWrapped = true; UpdateSizeSection()
+					BC.TextWrapped = false; UpdateB(); BC.TextWrapped = true; QueueLayoutUpdate()
 				end)
 				local BB = Custom:Create("TextButton", {
 					Font = Enum.Font.SourceSans, Text = "", BackgroundTransparency = 0.999,
@@ -1652,7 +1651,7 @@ function IsnowUI:CreateWindow(Config)
 					T.Size = UDim2.new(1, 0, 0, TC.AbsoluteSize.Y + 33); TC.TextWrapped = true
 				end
 				UpdateT()
-				TC:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() UpdateT(); UpdateSizeSection() end)
+				TC:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() UpdateT(); QueueLayoutUpdate() end)
 				local TB = Custom:Create("TextButton", {
 					Font = Enum.Font.SourceSans, Text = "", BackgroundTransparency = 0.999,
 					BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0), Name = "ToggleButton"
@@ -1718,10 +1717,10 @@ function IsnowUI:CreateWindow(Config)
 				}, S)
 				local function UpdateSl()
 					SC.TextWrapped = false
-					SC.Size = UDim2.new(1, -180, 0, 12 + (12 * math.floor(SC.TextBounds.X / SC.AbsoluteSize.X)))
+					SC.Size = UDim2.new(1, -180, 0, 12 + (12 * math.floor(SC.TextBounds.X / math.max(SC.AbsoluteSize.X, 1))))
 					S.Size = UDim2.new(1, 0, 0, SC.AbsoluteSize.Y + 33); SC.TextWrapped = true
 				end
-				SC:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() UpdateSl(); UpdateSizeSection() end)
+				SC:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() UpdateSl(); QueueLayoutUpdate() end)
 				UpdateSl()
 
 				local SI = Custom:Create("Frame", {
@@ -1866,13 +1865,13 @@ function IsnowUI:CreateWindow(Config)
 					Name = "InputContent", Parent = I
 				})
 				local function UpdateI()
-					local r = IC.TextBounds.X / IC.AbsoluteSize.X
+					local r = IC.TextBounds.X / math.max(IC.AbsoluteSize.X, 1)
 					IC.Size = UDim2.new(1, -180, 0, 12 + (12 * math.floor(r)))
 					I.Size = UDim2.new(1, 0, 0, IC.AbsoluteSize.Y + 33)
 				end
 				UpdateI()
 				IC:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-					IC.TextWrapped = false; UpdateI(); IC.TextWrapped = true; UpdateSizeSection()
+					IC.TextWrapped = false; UpdateI(); IC.TextWrapped = true; QueueLayoutUpdate()
 				end)
 				local IF2 = Custom:Create("Frame", {
 					AnchorPoint = Vector2.new(1, 0.5), BackgroundColor3 = Color3.fromRGB(255, 255, 255),
@@ -1943,7 +1942,7 @@ function IsnowUI:CreateWindow(Config)
 					DC.TextWrapped = false
 					DC.Size = UDim2.new(1, -180, 0, 12 + (12 * (DC.TextBounds.X // DC.AbsoluteSize.X)))
 					D.Size = UDim2.new(1, 0, 0, DC.AbsoluteSize.Y + 33)
-					DC.TextWrapped = true; UpdateSizeSection()
+					DC.TextWrapped = true; QueueLayoutUpdate()
 				end)
 
 				local SOF = Custom:Create("Frame", {
@@ -2304,10 +2303,10 @@ function IsnowUI:CreateWindow(Config)
 					RMC.Size = UDim2.new(1,-20,0,14*lc); RMC.TextWrapped = true
 					local hh = IsAcc and 30 or 24
 					local fh = hh + RMC.AbsoluteSize.Y + 10
-					RM.Size = UDim2.new(1,0,0,Expanded and fh or hh); UpdateSizeSection()
+					RM.Size = UDim2.new(1,0,0,Expanded and fh or hh); QueueLayoutUpdate()
 				end
 				UpdateRM()
-				RMC:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateRM)
+				RMC:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() UpdateRM(); QueueLayoutUpdate() end)
 				if IsAcc then
 					HB.Activated:Connect(function()
 						CircleClick(HB, Player:GetMouse().X, Player:GetMouse().Y)
