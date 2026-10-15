@@ -326,6 +326,12 @@ function IsnowUI:CreateWindow(Config)
 
 	local Funcs = {}
 	local SearchRegistry = {}
+		local ActiveSliderDrag
+		local SliderInputConnection = UserInputService.InputChanged:Connect(function(Input)
+			if ActiveSliderDrag and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
+				ActiveSliderDrag(Input.Position.X)
+			end
+		end)
 
 	local IsnowUIGui = Custom:Create("ScreenGui", {
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -1048,6 +1054,7 @@ function IsnowUI:CreateWindow(Config)
 		task.spawn(function()
 			HideExitConfirm()
 				FadeAndHide(function()
+					if SliderInputConnection then SliderInputConnection:Disconnect(); SliderInputConnection = nil end
 					if IsnowUIGui then IsnowUIGui:Destroy() end
 					if not IsnowUI.Unloaded then IsnowUI.Unloaded = true end
 				end)
@@ -1302,18 +1309,30 @@ function IsnowUI:CreateWindow(Config)
 				ScrolLayers.CanvasSize = UDim2.new(0, 0, 0, oy)
 			end
 
+			local LayoutQueued = false
+			local LastSectionHeight
+			local LayoutTweenInfo = TweenInfo.new(0.1)
 			local function UpdateSizeSection()
-				if OpenSection then
-					local h = 38
-					for _, v in pairs(SectionAdd:GetChildren()) do
-						if v.Name ~= "UIListLayout" and v.Name ~= "UICorner" then h = h + v.Size.Y.Offset + 3 end
-					end
-					TweenService:Create(FeatureFrame, TweenInfo.new(0.1), {Rotation = 90}):Play()
-					TweenService:Create(Section, TweenInfo.new(0.1), {Size = UDim2.new(1, 1, 0, h)}):Play()
-					TweenService:Create(SectionAdd, TweenInfo.new(0.1), {Size = UDim2.new(1, 0, 0, h - 38)}):Play()
-					TweenService:Create(SectionDecideFrame, TweenInfo.new(0.1), {Size = UDim2.new(1, 0, 0, 2)}):Play()
-					task.wait(0.5); UpdateSizeScroll()
+				if not OpenSection then return end
+				local h = 38
+				for _, v in ipairs(SectionAdd:GetChildren()) do
+					if v.Name ~= "UIListLayout" and v.Name ~= "UICorner" then h = h + v.Size.Y.Offset + 3 end
 				end
+				if h == LastSectionHeight and Section.Size.Y.Offset == h then return end
+				LastSectionHeight = h
+				TweenService:Create(FeatureFrame, LayoutTweenInfo, {Rotation = 90}):Play()
+				TweenService:Create(Section, LayoutTweenInfo, {Size = UDim2.new(1, 1, 0, h)}):Play()
+				TweenService:Create(SectionAdd, LayoutTweenInfo, {Size = UDim2.new(1, 0, 0, h - 38)}):Play()
+				TweenService:Create(SectionDecideFrame, LayoutTweenInfo, {Size = UDim2.new(1, 0, 0, 2)}):Play()
+				task.defer(UpdateSizeScroll)
+			end
+			local function QueueLayoutUpdate()
+				if LayoutQueued then return end
+				LayoutQueued = true
+				task.defer(function()
+					LayoutQueued = false
+					if Section.Parent then UpdateSizeSection() end
+				end)
 			end
 
 			local function ToggleSection()
@@ -1329,8 +1348,8 @@ function IsnowUI:CreateWindow(Config)
 			end
 
 			SectionButton.Activated:Connect(ToggleSection)
-			SectionAdd.ChildAdded:Connect(UpdateSizeSection)
-			SectionAdd.ChildRemoved:Connect(UpdateSizeSection)
+			SectionAdd.ChildAdded:Connect(QueueLayoutUpdate)
+			SectionAdd.ChildRemoved:Connect(QueueLayoutUpdate)
 			UpdateSizeScroll()
 
 			local function EnsureSectionOpen()
@@ -1372,25 +1391,46 @@ function IsnowUI:CreateWindow(Config)
 						BorderSizePixel = 0, Position = UDim2.new(0, 10, 0, 0),
 						Size = UDim2.new(1, -20, 0, 0), Visible = AddText ~= "", Name = "AddText"
 					}, P)
+					local ImageFrame
+					local ImageHeight = 0
+					local CodeFrame
+					local CodeHeight = 0
+					local ParagraphUpdateQueued = false
+					local ParagraphUpdating = false
 					local function UpdateP()
+						if ParagraphUpdating then return end
+						ParagraphUpdating = true
 						PC.TextWrapped = false
 						local descHeight = math.max(16, PC.TextBounds.Y)
 						PC.TextWrapped = true
 						TextLabel.TextWrapped = false
 						local textHeight = AddText ~= "" and math.max(16, TextLabel.TextBounds.Y) or 0
 						TextLabel.TextWrapped = true
-						TextLabel.Position = UDim2.new(0, 10, 0, 27 + descHeight + (AddText ~= "" and 5 or 0))
-						TextLabel.Size = UDim2.new(1, -20, 0, textHeight)
-						local contentBottom = 27 + descHeight + (AddText ~= "" and textHeight + 5 or 0)
-						P.Size = UDim2.new(1, 0, 0, math.max(42, contentBottom + 10))
-						UpdateSizeSection()
+						local cursor = 0
+						if ImageFrame then ImageFrame.Position = UDim2.new(0, 10, 0, cursor); cursor = cursor + ImageHeight + 8 end
+						PT.Position = UDim2.new(0, 10, 0, cursor); cursor = cursor + 18
+						PC.Position = UDim2.new(0, 10, 0, cursor); PC.Size = UDim2.new(1, -20, 0, descHeight); cursor = cursor + descHeight
+						if AddText ~= "" then
+							cursor = cursor + 5; TextLabel.Position = UDim2.new(0, 10, 0, cursor); TextLabel.Size = UDim2.new(1, -20, 0, textHeight); TextLabel.Visible = true; cursor = cursor + textHeight
+						else
+							TextLabel.Visible = false
+						end
+						if CodeFrame then cursor = cursor + 8; CodeFrame.Position = UDim2.new(0, 10, 0, cursor); cursor = cursor + CodeHeight end
+						P.Size = UDim2.new(1, 0, 0, math.max(42, cursor + 10))
+						ParagraphUpdating = false
+						QueueLayoutUpdate()
+					end
+					local function QueueParagraphUpdate()
+						if ParagraphUpdateQueued then return end
+						ParagraphUpdateQueued = true
+						task.defer(function() ParagraphUpdateQueued = false; if P.Parent then UpdateP() end end)
 					end
 					UpdateP()
-					PC:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateP)
-					TextLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateP)
+					PC:GetPropertyChangedSignal("AbsoluteSize"):Connect(QueueParagraphUpdate)
+					TextLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(QueueParagraphUpdate)
 
 					if Image then
-						local ImageFrame = Custom:Create("Frame", {
+						ImageFrame = Custom:Create("Frame", {
 							BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.935,
 							BorderSizePixel = 0, Position = UDim2.new(0, 10, 0, 0),
 							Size = UDim2.new(1, -20, 0, Config.ImageHeight or 120), Name = "ImageFrame"
@@ -1401,16 +1441,12 @@ function IsnowUI:CreateWindow(Config)
 							BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.new(1, -8, 1, -8),
 							Position = UDim2.new(0, 4, 0, 4), Name = "ImageLabel"
 						}, ImageFrame)
-						P.Image = ImageLabel
-						local ImageHeight = Config.ImageHeight or 120
-						P.Size = UDim2.new(1, 0, 0, ImageHeight + 58)
-						PT.Position = UDim2.new(0, 10, 0, ImageHeight + 9)
-						PC.Position = UDim2.new(0, 10, 0, ImageHeight + 27)
-						TextLabel.Position = UDim2.new(0, 10, 0, ImageHeight + 27 + math.max(16, PC.TextBounds.Y) + 5)
+						Paragraph.Image = ImageLabel
+						ImageHeight = Config.ImageHeight or 120
 					end
 
 					if Code then
-						local CodeFrame = Custom:Create("Frame", {
+						CodeFrame = Custom:Create("Frame", {
 							BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.935,
 							BorderSizePixel = 0, Position = UDim2.new(0, 10, 0, 0),
 							Size = UDim2.new(1, -20, 0, Config.CodeHeight or 86), Name = "CodeFrame"
@@ -1424,13 +1460,10 @@ function IsnowUI:CreateWindow(Config)
 							Size = UDim2.new(1, -18, 1, -16), Name = "CodeText"
 						}, CodeFrame)
 							P.CodeFrame = CodeFrame
-							local CodeHeight = Config.CodeHeight or 86
-							P.Size = UDim2.new(1, 0, 0, CodeHeight + 58)
-							PT.Position = UDim2.new(0, 10, 0, CodeHeight + 9)
-							PC.Position = UDim2.new(0, 10, 0, CodeHeight + 27)
-							TextLabel.Position = UDim2.new(0, 10, 0, CodeHeight + 27 + math.max(16, PC.TextBounds.Y) + 5)
+							CodeHeight = Config.CodeHeight or 86
 					end
 
+					UpdateP()
 					local Toggle = Config.Toggle or Config.DescriptionToggle
 					if Toggle then
 						local ToggleData = type(Toggle) == "table" and Toggle or {Default = Paragraph.Value}
@@ -1750,27 +1783,24 @@ function IsnowUI:CreateWindow(Config)
 						SD.Size = TS
 					end
 				end
+				local _LastX = nil
+				local function UpdateSliderFromX(cx)
+					if cx == _LastX then return end
+					_LastX = cx
+					local sc = math.clamp((cx - SF2.AbsolutePosition.X) / math.max(SF2.AbsoluteSize.X, 1), 0, 1)
+					FS:Set(Min + ((Max - Min) * sc), false)
+				end
 				SF2.InputBegan:Connect(function(i)
 					if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-						Dragging = true
+						Dragging = true; _LastX = nil; ActiveSliderDrag = UpdateSliderFromX
 					end
 				end)
 				SF2.InputEnded:Connect(function(i)
 					if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-						Dragging = false; Callback(FS.Value)
+						Dragging = false; if ActiveSliderDrag == UpdateSliderFromX then ActiveSliderDrag = nil end; Callback(FS.Value)
 					end
 				end)
-				local _LastX = nil
-				UserInputService.InputChanged:Connect(function(i)
-					if Dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-						local cx = i.Position.X
-						if cx ~= _LastX then
-							_LastX = cx
-							local sc = math.clamp((cx - SF2.AbsolutePosition.X) / SF2.AbsoluteSize.X, 0, 1)
-							FS:Set(Min + ((Max - Min) * sc), false)
-						end
-					end
-				end)
+
 				TB:GetPropertyChangedSignal("Text"):Connect(function()
 					local v = TB.Text:gsub("[^%d%.%-]", "")
 
