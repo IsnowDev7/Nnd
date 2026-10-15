@@ -14319,9 +14319,13 @@ end
 end
 
 local BackgroundBlur
+local BlurGeneration=0
 local function StartBackgroundBlur()
 if not aw.BlurBackground then return end
-if BackgroundBlur and BackgroundBlur.Parent then BackgroundBlur:Destroy() end
+BlurGeneration=BlurGeneration+1
+for _,effect in next,alLighting:GetChildren() do
+if effect:IsA("BlurEffect") and effect.Name=="WindUIBackgroundBlur" then effect:Destroy() end
+end
 BackgroundBlur=Instance.new("BlurEffect")
 BackgroundBlur.Name="WindUIBackgroundBlur"
 BackgroundBlur.Size=0
@@ -14329,11 +14333,26 @@ BackgroundBlur.Parent=alLighting
 ap(BackgroundBlur,0.3,{Size=18},Enum.EasingStyle.Quad,Enum.EasingDirection.Out):Play()
 end
 local function StopBackgroundBlur()
-if not BackgroundBlur or not BackgroundBlur.Parent then return end
+BlurGeneration=BlurGeneration+1
 local blur=BackgroundBlur
+BackgroundBlur=nil
+if not blur or not blur.Parent then
+for _,effect in next,alLighting:GetChildren() do
+if effect:IsA("BlurEffect") and effect.Name=="WindUIBackgroundBlur" then effect:Destroy() end
+end
+return
+end
+local generation=BlurGeneration
 ap(blur,0.22,{Size=0},Enum.EasingStyle.Quad,Enum.EasingDirection.In):Play()
 BackgroundBlur=nil
-task.delay(0.24,function() if blur and blur.Parent then blur:Destroy() end end)
+task.delay(0.24,function()
+if generation==BlurGeneration then
+if blur and blur.Parent then blur:Destroy() end
+for _,effect in next,alLighting:GetChildren() do
+if effect:IsA("BlurEffect") and effect.Name=="WindUIBackgroundBlur" then effect:Destroy() end
+end
+end
+end)
 end
 function aw.Open(C)
 if aw.Destroyed then
@@ -14347,6 +14366,7 @@ end)
 end
 
 task.wait(0.06)
+if aw.Closed or aw.Destroyed then return end
 aw.Closed=false
 
 aw.UIElements.Main.Size=UDim2.new(aw.Size.X.Scale,aw.Size.X.Offset,0,100)
@@ -14448,6 +14468,8 @@ end)
 end
 
 av.WindUI:ToggleAcrylic(false)
+StopBackgroundBlur()
+if c then ap(c,0.22,{ImageTransparency=1},Enum.EasingStyle.Quint,Enum.EasingDirection.In):Play() end
 
 if aw.UIElements.Main and aw.UIElements.Main:WaitForChild"Main"then
 aw.UIElements.Main.Main.Visible=false
@@ -14536,6 +14558,7 @@ aw.AcrylicPaint.Model:Destroy()
 end
 
 aw.Destroyed=true
+StopBackgroundBlur()
 
 task.wait(0.4)
 
