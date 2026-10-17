@@ -4939,8 +4939,12 @@ end
 end
 
 local autoLoadName=ag.AutoLoad
-if type(autoLoadName)=="table"then
-autoLoadName=autoLoadName.Name or autoLoadName.name or autoLoadName.Config or autoLoadName.config
+if autoLoadName==true then
+autoLoadName=ag.FileName or ag.fileName or "MainConfig"
+elseif autoLoadName==false then
+autoLoadName=nil
+elseif type(autoLoadName)=="table"then
+autoLoadName=autoLoadName.Name or autoLoadName.name or autoLoadName.Config or autoLoadName.config or autoLoadName.FileName or autoLoadName.fileName
 end
 if autoLoadName and tostring(autoLoadName)~=""and isfile and readfile then
 local autoPath=ae.Path..tostring(autoLoadName)..".json"
@@ -4954,8 +4958,12 @@ end
 end
 end
 
-if autoLoadName and tostring(autoLoadName)~="" and not ae.Configs[tostring(autoLoadName)] then
-    ae:CreateConfig(tostring(autoLoadName),true)
+if autoLoadName and tostring(autoLoadName)~="" then
+local selectedName=tostring(autoLoadName)
+local selectedConfig=ae.Configs[selectedName]
+if type(selectedConfig)~="table" or type(selectedConfig.Load)~="function" then
+ ae:CreateConfig(selectedName,true)
+end
 end
 
 return ae
