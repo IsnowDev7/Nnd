@@ -13117,7 +13117,7 @@ Destroyed=false,
 AutoRejoin=av.AutoRejoin==true,
 AutoExecute=av.AutoExecute,
 AutoLoad=av.AutoLoad or "MainConfig",
-AutoSave=true,
+AutoSave=av.AutoSave~=false,
 IsFullscreen=false,
 CanResize=av.Resizable~=false,
 IsOpenButtonEnabled=true,
@@ -13146,55 +13146,81 @@ PendingFlags={},
 IsToggleDragging=false,
 }
 
--- Rayfield-compatible AutoExecute and AutoRejoin recovery.
+-- Reliable AutoExecute and AutoRejoin recovery.
 local function setupRecovery()
-local function queueAutoExecute()
-local option=av.AutoExecute
-if option==nil then return end
-local url=nil
+local function resolveAutoExecuteUrl()
+local option=aw.AutoExecute
+if option==nil or option==false then return nil end
 local env=nil
 pcall(function()
 env=if typeof(getgenv)=="function"then getgenv()else _G
 end)
 if option==true or option=="scriptlink"then
-if type(env)=="table"then
-url=env.RayfieldAutoExecuteUrl or env.AutoExecuteScript or env.ScriptLink
-end
+if type(env)=="table"then return env.RayfieldAutoExecuteUrl or env.AutoExecuteScript or env.ScriptLink end
 elseif type(option)=="string"then
-url=option
+return option
 end
+return nil
+end
+local function getQueueFunction()
+local candidates={}
+pcall(function()
+if type(queue_on_teleport)=="function"then table.insert(candidates,queue_on_teleport)end
+if type(queueonteleport)=="function"then table.insert(candidates,queueonteleport)end
+end)
+if syn and type(syn.queue_on_teleport)=="function"then table.insert(candidates,syn.queue_on_teleport)end
+if fluxus and type(fluxus.queue_on_teleport)=="function"then table.insert(candidates,fluxus.queue_on_teleport)end
+for _,candidate in ipairs(candidates)do
+if type(candidate)=="function"then return candidate end
+end
+return nil
+end
+local function queueAutoExecute()
+local url=resolveAutoExecuteUrl()
 if type(url)~="string"or url==""then
-warn("Rayfield: AutoExecute requires a script URL, or getgenv().RayfieldAutoExecuteUrl when AutoExecute=true")
-return
+if aw.AutoExecute~=nil and aw.AutoExecute~=false then warn("[ WindUI ] AutoExecute needs a valid URL or getgenv().RayfieldAutoExecuteUrl")end
+return false
 end
-local queueFunction=queue_on_teleport or queueonteleport
-if type(queueFunction)~="function"then
-if syn and type(syn.queue_on_teleport)=="function"then queueFunction=syn.queue_on_teleport end
-if fluxus and type(fluxus.queue_on_teleport)=="function"then queueFunction=fluxus.queue_on_teleport end
+local queueFunction=getQueueFunction()
+if not queueFunction then
+warn("[ WindUI ] AutoExecute could not find queue_on_teleport or queueonteleport")
+return false
 end
-if type(queueFunction)~="function"then
-warn("Rayfield: queue_on_teleport is unavailable; AutoExecute cannot be queued")
-return
-end
-local queuedSource="pcall(function()local u="..string.format("%q",url)..";local h=game:HttpGet(u);local f=loadstring(h);if type(f)=='function'then f()end end)"
-pcall(queueFunction,queuedSource)
+local quoted=string.format("%q",url)
+local queuedSource="task.spawn(function()local url="..quoted..";local function run()local ok,body=pcall(function()return game:HttpGet(url)end);if not ok or type(body)~='string'or#body==0 then return false end;local compiler=loadstring or load;if type(compiler)~='function'then return false end;local okChunk,chunk=pcall(compiler,body);if not okChunk or type(chunk)~='function'then return false end;return pcall(chunk)end;for attempt=1,8 do if run()then break end task.wait(math.min(attempt*2,12))end end)"
+local ok,result=pcall(queueFunction,queuedSource)
+if not ok or result==false then warn("[ WindUI ] AutoExecute queue failed: "..tostring(result))end
+return ok and result~=false
 end
 queueAutoExecute()
 if not aw.AutoRejoin then return end
-local ok,player=pcall(function()return ak.LocalPlayer end)
-if not ok or not player then return end
+local player=ak.LocalPlayer
+if not player then return end
 local teleportService=atTeleportService
 local retrying=false
+local retryToken=0
 local function requestRejoin(reason)
 if aw.Destroyed or retrying then return end
 retrying=true
+retryToken+=1
+local token=retryToken
 task.spawn(function()
 task.wait(2)
-for attempt=1,3 do
-if aw.Destroyed then retrying=false return end
+for attempt=1,5 do
+if aw.Destroyed or token~=retryToken then retrying=false return end
 queueAutoExecute()
 local sent=pcall(function()teleportService:Teleport(game.PlaceId,player)end)
-if sent then return end
+if sent then
+-- A successful method call does not guarantee that the client actually leaves.
+-- Release the guard after a watchdog interval so a cancelled teleport can retry.
+task.delay(15,function()
+if retrying and token==retryToken and not aw.Destroyed then
+retrying=false
+requestRejoin("teleport timeout")
+end
+end)
+return
+end
 task.wait(math.min(10,attempt*3))
 end
 retrying=false
@@ -13202,18 +13228,19 @@ end)
 end
 pcall(function()
 an.AddSignal(teleportService.TeleportInitFailed,function(localPlayer)
-if localPlayer==player then requestRejoin("Teleport failed")end
+if localPlayer==player then retrying=false requestRejoin("TeleportInitFailed")end
 end)
 end)
 pcall(function()
 an.AddSignal(player.OnTeleport,function(state)
-if state==Enum.TeleportState.Failed then requestRejoin("Teleport failed")end
+if state==Enum.TeleportState.Failed then retrying=false requestRejoin("OnTeleport failed")end
 end)
 end)
 local function inspectMessage(message)
 local text=string.lower(tostring(message or ""))
-if string.find(text,"shutdown",1,true)or string.find(text,"updated",1,true)or string.find(text,"disconnected",1,true)or string.find(text,"lost connection",1,true)or string.find(text,"server closed",1,true)then
-requestRejoin("Game unavailable")
+if text:find("shutdown",1,true)or text:find("server closed",1,true)or text:find("disconnected",1,true)or text:find("disconnect",1,true)or text:find("lost connection",1,true)or text:find("connection lost",1,true)or text:find("error code 277",1,true)or text:find("error code 279",1,true)or text:find("error code 273",1,true)or text:find("kicked",1,true)or text:find("updated",1,true)then
+retrying=false
+requestRejoin("connection error")
 end
 end
 pcall(function()
@@ -13224,13 +13251,25 @@ if okMessage then inspectMessage(message)end
 end)
 end)
 pcall(function()
-local overlay=game:GetService("CoreGui"):FindFirstChild("RobloxPromptGui")
-overlay=overlay and overlay:FindFirstChild("promptOverlay")
-if overlay then
+local guiService=game:GetService("GuiService")
+an.AddSignal(guiService.ErrorMessageChanged,function(message)
+inspectMessage(message)
+end)
+end)
+pcall(function()
+local coreGui=game:GetService("CoreGui")
+local function bindOverlay(overlay)
+if not overlay then return end
 an.AddSignal(overlay.DescendantAdded,function(object)
 if object:IsA("TextLabel")or object:IsA("TextButton")then inspectMessage(object.Text)end
 end)
 end
+local prompt=coreGui:FindFirstChild("RobloxPromptGui")
+bindOverlay(prompt and prompt:FindFirstChild("promptOverlay"))
+an.AddSignal(coreGui.DescendantAdded,function(object)
+if object.Name=="promptOverlay"then bindOverlay(object)elseif object:IsA("TextLabel")or object:IsA("TextButton")then inspectMessage(object.Text)end
+end)
+end)
 end)
 end
 setupRecovery()
@@ -15730,6 +15769,21 @@ aa:SetLanguage(as.Language)
 
 function aa.CreateWindow(az,aA)
 local aB=a.load'ae'
+local configOptions=aA.Configuration or aA.configuration
+if type(configOptions)=="table"then
+if not aA.Folder then aA.Folder=configOptions.Folder or configOptions.folder or configOptions.CustomFolder or configOptions.customFolder end
+if aA.AutoLoad==nil then
+local requested=configOptions.AutoLoad
+if requested==nil then requested=configOptions.autoLoad end
+if type(requested)=="boolean"then
+if requested then aA.AutoLoad=configOptions.FileName or configOptions.fileName or "MainConfig" else aA.AutoLoad=false end
+else aA.AutoLoad=requested or configOptions.FileName or configOptions.fileName end
+end
+if aA.AutoSave==nil then aA.AutoSave=configOptions.AutoSave end
+if aA.AutoSave==nil then aA.AutoSave=configOptions.autoSave end
+end
+if aA.Folder==nil then aA.Folder="WindUI" end
+if aA.AutoLoad==nil then aA.AutoLoad="MainConfig" end
 
 if not am:IsStudio()and writefile then
 if not isfolder"WindUI"then
