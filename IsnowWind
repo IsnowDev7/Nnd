@@ -4919,6 +4919,22 @@ ae.Configs[aj]=readfile(aj..".json")
 end
 end
 
+local autoLoadName=ag.AutoLoad
+if type(autoLoadName)=="table"then
+autoLoadName=autoLoadName.Name or autoLoadName.name or autoLoadName.Config or autoLoadName.config
+end
+if autoLoadName and tostring(autoLoadName)~=""and isfile and readfile then
+local autoPath=ae.Path..tostring(autoLoadName)..".json"
+if isfile(autoPath)then
+local ok,data=pcall(function()
+return ac:JSONDecode(readfile(autoPath))
+end)
+if ok and type(data)=="table"then
+ag.PendingConfigData=data.__elements or data.elements or data
+end
+end
+end
+
 return ae
 end
 
@@ -11503,12 +11519,12 @@ au, av=ar:New(at)
 if at.Flag and typeof(at.Flag)=="string"then
 if ak.CurrentConfig then
 ak.CurrentConfig:Register(at.Flag,av)
-
+end
 if ak.PendingConfigData and ak.PendingConfigData[at.Flag]then
 local aw=ak.PendingConfigData[at.Flag]
 
 local ax=ak.ConfigManager
-if ax.Parser[aw.__type]then
+if ax and ax.Parser[aw.__type]then
 task.defer(function()
 local ay,az=pcall(function()
 ax.Parser[aw.__type].Load(av,aw)
@@ -11526,8 +11542,7 @@ warn(
 end
 end)
 end
-end
-else
+elseif not ak.CurrentConfig then
 ak.PendingFlags=ak.PendingFlags or{}
 ak.PendingFlags[at.Flag]=av
 end
