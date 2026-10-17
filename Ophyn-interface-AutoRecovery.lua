@@ -2493,47 +2493,49 @@ function UI.new(options)
 
 	local autoExecuteUrl = cfg.AutoExecute
 	local autoRejoin = cfg.AutoRejoin == true or cfg.AutoReconnect == true
-	local teleportQueued = false
-	local rejoinScheduled = false
+	local executeQueued = false
+	local rejoinPending = false
 
-	local function getQueueFunction()
-		local q = rawget(_G, "queue_on_teleport") or rawget(_G, "queueonteleport")
+	local function getQueueOnTeleport()
+		local environment = _G
+		pcall(function()
+			if type(getgenv) == "function" then environment = getgenv() end
+		end)
+		local q = rawget(environment, "queue_on_teleport") or rawget(environment, "queueonteleport")
 		if type(q) == "function" then return q end
-		if syn and type(syn.queue_on_teleport) == "function" then return syn.queue_on_teleport end
-		if fluxus and type(fluxus.queue_on_teleport) == "function" then return fluxus.queue_on_teleport end
+		local synTable = rawget(environment, "syn")
+		if type(synTable) == "table" and type(synTable.queue_on_teleport) == "function" then return synTable.queue_on_teleport end
+		local fluxusTable = rawget(environment, "fluxus")
+		if type(fluxusTable) == "table" and type(fluxusTable.queue_on_teleport) == "function" then return fluxusTable.queue_on_teleport end
 		return nil
 	end
 
-	local function queueAutoExecute(force)
-		if type(autoExecuteUrl) ~= "string" or autoExecuteUrl == "" then return false end
-		if teleportQueued and not force then return true end
-		local q = getQueueFunction()
+	local function queueAutoExecute()
+		if executeQueued or type(autoExecuteUrl) ~= "string" or autoExecuteUrl == "" then return false end
+		local q = getQueueOnTeleport()
 		if type(q) ~= "function" then return false end
-		local source = "task.spawn(function()local u=" .. string.format("%q", autoExecuteUrl) .. ";local f=loadstring or load;for a=1,8 do local ok,b=pcall(function()return game:HttpGet(u)end);if ok and type(b)=="string" and #b>0 and type(f)=="function" then local ok2,c=pcall(f,b);if ok2 and type(c)=="function" then local ok3=pcall(c);if ok3 then break end end end;task.wait(math.min(a*2,12))end end)"
+		local source = "local u=" .. string.format("%q", autoExecuteUrl) .. ";local ok,b=pcall(function()return game:HttpGet(u)end);if ok and type(b)=="string" and b~='' then local f=loadstring or load;if type(f)=="function" then local ok2,c=pcall(f,b);if ok2 and type(c)=="function" then pcall(c)end end end"
 		local ok = pcall(q, source)
-		if ok then teleportQueued = true end
+		if ok then executeQueued = true end
 		return ok
 	end
 
 	local function requestRejoin()
-		if rejoinScheduled then return end
-		rejoinScheduled = true
-		task.spawn(function()
-			task.wait(2)
-			for attempt = 1, 5 do
-				local ok = pcall(function()
-					local players = game:GetService("Players")
-					game:GetService("TeleportService"):Teleport(game.PlaceId, players.LocalPlayer)
-				end)
-				if ok then break end
-				task.wait(math.min(attempt * 3, 12))
-			end
-			task.delay(15, function() rejoinScheduled = false end)
+		if rejoinPending then return end
+		rejoinPending = true
+		task.delay(2, function()
+			local ok = pcall(function()
+				local players = game:GetService("Players")
+				local teleportService = game:GetService("TeleportService")
+				teleportService:Teleport(game.PlaceId, players.LocalPlayer)
+			end)
+			if not ok then rejoinPending = false end
+			task.delay(12, function() rejoinPending = false end)
 		end)
 	end
 
 	if type(autoExecuteUrl) == "string" and autoExecuteUrl ~= "" then
-		queueAutoExecute(true)
+		queueAutoExecute()
 	end
 
 	if autoRejoin then
@@ -2542,15 +2544,18 @@ function UI.new(options)
 		local player = players.LocalPlayer
 		pcall(function()
 			teleportService.TeleportInitFailed:Connect(function(who)
-				if who == player then teleportQueued = false; requestRejoin() end
+				if who == player then
+					executeQueued = false
+					requestRejoin()
+				end
 			end)
 		end)
 		pcall(function()
 			player.OnTeleport:Connect(function(state)
 				if state == Enum.TeleportState.Requested or state == Enum.TeleportState.Started or state == Enum.TeleportState.InProgress then
-					queueAutoExecute(false)
+					queueAutoExecute()
 				elseif state == Enum.TeleportState.Failed then
-					teleportQueued = false
+					executeQueued = false
 					requestRejoin()
 				end
 			end)
