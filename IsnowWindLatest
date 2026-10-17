@@ -13114,10 +13114,10 @@ CanDropdown=true,
 Closed=false,
 Parent=av.Parent,
 Destroyed=false,
-AutoRejoin=av.AutoRejoin==true,
+AutoReconnect=av.AutoReconnect==true or av.AutoRejoin==true,
 AutoExecute=av.AutoExecute,
-AutoLoad=av.AutoLoad==nil and "MainConfig" or av.AutoLoad,
-AutoSave=av.AutoSave~=false,
+AutoLoad=av.AutoLoad or "MainConfig",
+AutoSave=true,
 IsFullscreen=false,
 CanResize=av.Resizable~=false,
 IsOpenButtonEnabled=true,
@@ -13146,134 +13146,107 @@ PendingFlags={},
 IsToggleDragging=false,
 }
 
--- Reliable AutoExecute and AutoRejoin recovery.
+-- Recovery helpers: queue the configured loader before teleports and retry failed reconnects.
 local function setupRecovery()
-local function resolveAutoExecuteUrl()
-local option=aw.AutoExecute
-if option==nil or option==false then return nil end
-local env=_G
-pcall(function()
-if type(getgenv)=="function"then env=getgenv()end
-end)
-if option==true or option=="scriptlink"then
-if type(env)=="table"then return env.RayfieldAutoExecuteUrl or env.AutoExecuteScript or env.ScriptLink end
-elseif type(option)=="string"then
-return option
+local function getQueueOnTeleport()
+local queueFunctions={rawget(_G,"queue_on_teleport"),rawget(_G,"queueonteleport")}
+if syn and type(syn.queue_on_teleport)=="function"then table.insert(queueFunctions,syn.queue_on_teleport)end
+if fluxus and type(fluxus.queue_on_teleport)=="function"then table.insert(queueFunctions,fluxus.queue_on_teleport)end
+if queue_on_teleport and type(queue_on_teleport)=="function"then table.insert(queueFunctions,queue_on_teleport)end
+for _,queueFunction in next,queueFunctions do
+if type(queueFunction)=="function"then return queueFunction end
 end
-return nil
-end
-local function getQueueFunction()
-local candidates={}
-pcall(function()
-if type(queue_on_teleport)=="function"then table.insert(candidates,queue_on_teleport)end
-if type(queueonteleport)=="function"then table.insert(candidates,queueonteleport)end
-end)
-if syn and type(syn.queue_on_teleport)=="function"then table.insert(candidates,syn.queue_on_teleport)end
-if fluxus and type(fluxus.queue_on_teleport)=="function"then table.insert(candidates,fluxus.queue_on_teleport)end
-for _,candidate in ipairs(candidates)do
-if type(candidate)=="function"then return candidate end
-end
-return nil
 end
 local function queueAutoExecute()
-local url=resolveAutoExecuteUrl()
-if type(url)~="string"or url==""then
-if aw.AutoExecute~=nil and aw.AutoExecute~=false then warn("[ WindUI ] AutoExecute needs a valid URL or getgenv().RayfieldAutoExecuteUrl")end
-return false
-end
-local queueFunction=getQueueFunction()
+local url=aw.AutoExecute
+if type(url)~="string"or not url:match("^https?://")then return false end
+local queueFunction=getQueueOnTeleport()
 if not queueFunction then
-warn("[ WindUI ] AutoExecute could not find queue_on_teleport or queueonteleport")
+warn("[ WindUI ] AutoExecute is enabled, but this executor has no queue_on_teleport support")
 return false
 end
-local quoted=string.format("%q",url)
-local queuedSource="task.spawn(function()local url="..quoted..";local function run()local ok,body=pcall(function()return game:HttpGet(url)end);if not ok or type(body)~='string'or#body==0 then return false end;local compiler=loadstring or load;if type(compiler)~='function'then return false end;local okChunk,chunk=pcall(compiler,body);if not okChunk or type(chunk)~='function'then return false end;return pcall(chunk)end;for attempt=1,8 do if run()then break end task.wait(math.min(attempt*2,12))end end)"
-local ok,result=pcall(queueFunction,queuedSource)
-if not ok or result==false then warn("[ WindUI ] AutoExecute queue failed: "..tostring(result))end
-return ok and result~=false
+local quotedUrl=string.format("%q",url)
+local queuedSource="task.spawn(function()local loaded=false for attempt=1,6 do if game:IsLoaded()then task.wait(1)end local ok,body=pcall(function()return game:HttpGet("..quotedUrl..")end) if ok and type(body)=='string'and#body>0 then local runner=loadstring or load local runOk=pcall(function()runner(body)()end) if runOk then loaded=true break end end task.wait(math.min(attempt*2,10)) end end)"
+local ok,err=pcall(queueFunction,queuedSource)
+if not ok then
+warn("[ WindUI ] Failed to queue AutoExecute: "..tostring(err))
 end
-queueAutoExecute()
-if not aw.AutoRejoin then return end
-local player=ak.LocalPlayer
-if not player then return end
-local teleportService=atTeleportService
-local retrying=false
-local retryToken=0
-local function requestRejoin(reason)
-if aw.Destroyed or retrying then return end
-retrying=true
-retryToken+=1
-local token=retryToken
-task.spawn(function()
-task.wait(2)
-for attempt=1,5 do
-if aw.Destroyed or token~=retryToken then retrying=false return end
-queueAutoExecute()
-local sent=pcall(function()teleportService:Teleport(game.PlaceId,player)end)
-if sent then
--- A successful method call does not guarantee that the client actually leaves.
--- Release the guard after a watchdog interval so a cancelled teleport can retry.
-task.delay(15,function()
-if retrying and token==retryToken and not aw.Destroyed then
-retrying=false
-requestRejoin("teleport timeout")
+return ok
 end
-end)
+local autoExecuteQueued=queueAutoExecute()
+if not aw.AutoReconnect then return end
+local reconnecting=false
+local reconnectAttempts=0
+local reconnectToken=0
+local maxReconnectAttempts=8
+local function scheduleReconnect(reason)
+if aw.Destroyed or reconnecting then return end
+if reconnectAttempts>=maxReconnectAttempts then
+warn("[ WindUI ] AutoReconnect stopped after "..tostring(maxReconnectAttempts).." attempts ("..tostring(reason or "unknown")..")")
 return
 end
-task.wait(math.min(10,attempt*3))
-end
-retrying=false
+reconnecting=true
+reconnectAttempts+=1
+reconnectToken+=1
+local token=reconnectToken
+local waitTime=math.min(2+(reconnectAttempts-1)*2,14)
+task.delay(waitTime,function()
+if aw.Destroyed or token~=reconnectToken then reconnecting=false return end
+queueAutoExecute()
+local ok,err=pcall(function()
+atTeleportService:Teleport(game.PlaceId,ak.LocalPlayer)
 end)
+if not ok then
+reconnecting=false
+if reconnectAttempts<maxReconnectAttempts then task.defer(function()scheduleReconnect("Teleport error: "..tostring(err))end)end
+else
+task.delay(25,function()
+if token==reconnectToken and not aw.Destroyed then reconnecting=false end
+end)
+end
+end)
+end
+local function teleportFailed(reason)
+reconnecting=false
+scheduleReconnect(reason or "teleport failed")
 end
 pcall(function()
-an.AddSignal(teleportService.TeleportInitFailed,function(localPlayer)
-if localPlayer==player then retrying=false requestRejoin("TeleportInitFailed")end
+an.AddSignal(atTeleportService.TeleportInitFailed,function(player,result,message)
+if player==ak.LocalPlayer then teleportFailed(message or result)end
 end)
 end)
 pcall(function()
-an.AddSignal(player.OnTeleport,function(state)
-if state==Enum.TeleportState.Failed then retrying=false requestRejoin("OnTeleport failed")end
-end)
-end)
-local function inspectMessage(message)
-local text=string.lower(tostring(message or ""))
-if text:find("shutdown",1,true)or text:find("server closed",1,true)or text:find("disconnected",1,true)or text:find("disconnect",1,true)or text:find("lost connection",1,true)or text:find("connection lost",1,true)or text:find("error code 277",1,true)or text:find("error code 279",1,true)or text:find("error code 273",1,true)or text:find("kicked",1,true)or text:find("updated",1,true)then
-retrying=false
-requestRejoin("connection error")
+an.AddSignal(ak.LocalPlayer.OnTeleport,function(state)
+if state==Enum.TeleportState.Requested or state==Enum.TeleportState.Started or state==Enum.TeleportState.InProgress then
+queueAutoExecute()
+elseif state==Enum.TeleportState.Failed then
+teleportFailed("Player.OnTeleport failed")
 end
-end
-pcall(function()
-local guiService=game:GetService("GuiService")
-an.AddSignal(guiService:GetPropertyChangedSignal("ErrorMessage"),function()
-local okMessage,message=pcall(function()return guiService.ErrorMessage end)
-if okMessage then inspectMessage(message)end
 end)
 end)
 pcall(function()
 local guiService=game:GetService("GuiService")
 an.AddSignal(guiService.ErrorMessageChanged,function(message)
-inspectMessage(message)
+if type(message)=="string"and#message>0 then
+local lower=string.lower(message)
+if string.find(lower,"disconnect")or string.find(lower,"lost connection")or string.find(lower,"teleport")or string.find(lower,"server shutdown")or string.find(lower,"error code")or string.find(lower,"kicked")then
+teleportFailed("client error: "..message)
+end
+end
 end)
 end)
 pcall(function()
-local coreGui=game:GetService("CoreGui")
-local function bindOverlay(overlay)
-if not overlay then return end
-an.AddSignal(overlay.DescendantAdded,function(object)
-if object:IsA("TextLabel")or object:IsA("TextButton")then inspectMessage(object.Text)end
+an.AddSignal(ak.LocalPlayer.AncestryChanged,function(_,parent)
+if parent==nil then teleportFailed("local player removed")end
 end)
-end
-local prompt=coreGui:FindFirstChild("RobloxPromptGui")
-bindOverlay(prompt and prompt:FindFirstChild("promptOverlay"))
-an.AddSignal(coreGui.DescendantAdded,function(object)
-if object.Name=="promptOverlay"then bindOverlay(object)elseif object:IsA("TextLabel")or object:IsA("TextButton")then inspectMessage(object.Text)end
 end)
+pcall(function()
+an.AddSignal(ak.PlayerRemoving,function(player)
+if player==ak.LocalPlayer then teleportFailed("local player removing")end
 end)
 end)
 end
-local recoveryOk,recoveryError=pcall(setupRecovery)
-if not recoveryOk then warn("[ WindUI ] Recovery initialization skipped: "..tostring(recoveryError))end
+setupRecovery()
 aw.UICorner=aw.Radius
 
 aw.TopBarButtonIconSize=aw.TopBarButtonIconSize or(aw.Topbar.ButtonsType=="Mac"and 11 or 16)
@@ -15769,25 +15742,7 @@ aa:SetTheme"Dark"
 aa:SetLanguage(as.Language)
 
 function aa.CreateWindow(az,aA)
-if aA==nil and type(az)=="table"then aA=az end
-aA=aA or{}
-if aA.AutoLoad==true then aA.AutoLoad=aA.FileName or aA.fileName or "MainConfig" end
 local aB=a.load'ae'
-local configOptions=aA.Configuration or aA.configuration
-if type(configOptions)=="table"then
-if not aA.Folder then aA.Folder=configOptions.Folder or configOptions.folder or configOptions.CustomFolder or configOptions.customFolder end
-if aA.AutoLoad==nil then
-local requested=configOptions.AutoLoad
-if requested==nil then requested=configOptions.autoLoad end
-if type(requested)=="boolean"then
-if requested then aA.AutoLoad=configOptions.FileName or configOptions.fileName or "MainConfig" else aA.AutoLoad=false end
-else aA.AutoLoad=requested or configOptions.FileName or configOptions.fileName end
-end
-if aA.AutoSave==nil then aA.AutoSave=configOptions.AutoSave end
-if aA.AutoSave==nil then aA.AutoSave=configOptions.autoSave end
-end
-if aA.Folder==nil then aA.Folder="WindUI" end
-if aA.AutoLoad==nil then aA.AutoLoad="MainConfig" end
 
 if not am:IsStudio()and writefile then
 if not isfolder"WindUI"then
