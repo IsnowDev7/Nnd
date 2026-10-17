@@ -13192,22 +13192,6 @@ CornerRadius=UDim.new(0,aw.UICorner),
 
 if aw.Folder then
 aw.ConfigManager=au:Init(aw)
-if aw.ConfigManager and aw.AutoLoad~=nil then
-local autoLoadName
-if type(aw.AutoLoad)=="string"then
- autoLoadName=aw.AutoLoad
-elseif type(aw.AutoLoad)=="table"then
- autoLoadName=aw.AutoLoad.Name or aw.AutoLoad.name or aw.AutoLoad.Config or aw.AutoLoad.config
-end
-if autoLoadName and tostring(autoLoadName)~=''then
-local autoConfig,autoError=aw.ConfigManager:CreateConfig(tostring(autoLoadName),true)
-if not autoConfig then
-warn("[ WindUI.ConfigManager ] Failed to create AutoLoad config '"..tostring(autoLoadName).."': "..tostring(autoError))
-end
-else
-warn("[ WindUI.ConfigManager ] AutoLoad requires a config name, for example AutoLoad = 'MainConfig'.")
-end
-end
 end
 
 if aw.Acrylic then local
@@ -14734,6 +14718,24 @@ end
 function aw.SetCurrentConfig(C,F)
 aw.CurrentConfig=F
 end
+task.defer(function()
+task.wait(0.1)
+if aw.Destroyed or not aw.ConfigManager or aw.AutoLoad==nil then return end
+local autoLoadName
+if type(aw.AutoLoad)=="string"then
+ autoLoadName=aw.AutoLoad
+elseif type(aw.AutoLoad)=="table"then
+ autoLoadName=aw.AutoLoad.Name or aw.AutoLoad.name or aw.AutoLoad.Config or aw.AutoLoad.config
+end
+if not autoLoadName or tostring(autoLoadName)==""then
+warn("[ WindUI.ConfigManager ] AutoLoad requires a config name, for example AutoLoad = 'MainConfig'.")
+return
+end
+local autoConfig,autoError=aw.ConfigManager:CreateConfig(tostring(autoLoadName),true)
+if not autoConfig then
+warn("[ WindUI.ConfigManager ] Failed to create AutoLoad config '"..tostring(autoLoadName).."': "..tostring(autoError))
+end
+end)
 
 do
 local C=40
