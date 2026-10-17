@@ -15863,18 +15863,6 @@ if aA.Acrylic then
 au.init()
 end
 
-if h.AutoSave and h.ConfigManager and h.CurrentConfig then
-    task.spawn(function()
-        while not h.Destroyed do
-            task.wait(1)
-            if h.AutoSave and h.CurrentConfig and not h.Destroyed then
-                pcall(function()
-                    h.CurrentConfig:Save()
-                end)
-            end
-        end
-    end)
-end
 
 
 
