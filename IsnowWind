@@ -13143,18 +13143,23 @@ if text:find("disconnect",1,true)or text:find("lost connection",1,true)or text:f
 requestReconnect()
 end
 end
-an.AddSignal(auGuiService:GetPropertyChangedSignal"ErrorMessage",function()
-local ok,message=pcall(function()return auGuiService.ErrorMessage end)
-if ok then inspectMessage(message)end
-end)
-pcall(function()
-local overlay=avCoreGui:FindFirstChild"RobloxPromptGui"
-overlay=overlay and overlay:FindFirstChild"promptOverlay"
-if overlay then
+local function watchPromptOverlay(overlay)
+if not overlay then return end
 an.AddSignal(overlay.DescendantAdded,function(object)
 if object:IsA"TextLabel"or object:IsA"TextButton"then inspectMessage(object.Text)end
 end)
 end
+pcall(function()
+local promptGui=avCoreGui:FindFirstChild"RobloxPromptGui"
+local overlay=promptGui and promptGui:FindFirstChild"promptOverlay"
+watchPromptOverlay(overlay)
+an.AddSignal(avCoreGui.DescendantAdded,function(object)
+if object.Name=="promptOverlay"then
+watchPromptOverlay(object)
+elseif object:IsA"TextLabel"or object:IsA"TextButton"then
+inspectMessage(object.Text)
+end
+end)
 end)
 end
 setupRecovery()
