@@ -4958,12 +4958,8 @@ end
 end
 end
 
-if autoLoadName and tostring(autoLoadName)~="" then
-local selectedName=tostring(autoLoadName)
-local selectedConfig=ae.Configs[selectedName]
-if type(selectedConfig)~="table" or type(selectedConfig.Load)~="function" then
- ae:CreateConfig(selectedName,true)
-end
+if autoLoadName and tostring(autoLoadName)~="" and not ae.Configs[tostring(autoLoadName)] then
+    ae:CreateConfig(tostring(autoLoadName),true)
 end
 
 return ae
@@ -13122,10 +13118,10 @@ CanDropdown=true,
 Closed=false,
 Parent=av.Parent,
 Destroyed=false,
-AutoRejoin=av.AutoRejoin==true,
+AutoReconnect=av.AutoReconnect==true or av.AutoRejoin==true,
 AutoExecute=av.AutoExecute,
-AutoLoad=av.AutoLoad==nil and "MainConfig" or av.AutoLoad,
-AutoSave=av.AutoSave~=false,
+AutoLoad=av.AutoLoad or "MainConfig",
+AutoSave=true,
 IsFullscreen=false,
 CanResize=av.Resizable~=false,
 IsOpenButtonEnabled=true,
@@ -13154,38 +13150,103 @@ PendingFlags={},
 IsToggleDragging=false,
 }
 
--- Minimal constructor-safe AutoExecute and AutoRejoin support.
+-- Recovery helpers: queue the configured loader before teleports and retry failed reconnects.
 local function setupRecovery()
+local function getQueueOnTeleport()
+local queueFunctions={rawget(_G,"queue_on_teleport"),rawget(_G,"queueonteleport")}
+if syn and type(syn.queue_on_teleport)=="function"then table.insert(queueFunctions,syn.queue_on_teleport)end
+if fluxus and type(fluxus.queue_on_teleport)=="function"then table.insert(queueFunctions,fluxus.queue_on_teleport)end
+if queue_on_teleport and type(queue_on_teleport)=="function"then table.insert(queueFunctions,queue_on_teleport)end
+for _,queueFunction in next,queueFunctions do
+if type(queueFunction)=="function"then return queueFunction end
+end
+end
+local function queueAutoExecute()
 local url=aw.AutoExecute
-if type(url)=="string" and url~="" then
-local queueFunction=rawget(_G,"queue_on_teleport") or rawget(_G,"queueonteleport")
-if not queueFunction and syn and type(syn.queue_on_teleport)=="function"then queueFunction=syn.queue_on_teleport end
-if not queueFunction and fluxus and type(fluxus.queue_on_teleport)=="function"then queueFunction=fluxus.queue_on_teleport end
-if type(queueFunction)=="function"then
-local source="task.spawn(function()local u="..string.format("%q",url)..";local ok,b=pcall(function()return game:HttpGet(u)end);if ok and type(b)=="string"and#b>0 then local f=loadstring or load;if type(f)=="function"then local ok2,c=pcall(f,b);if ok2 and type(c)=="function"then pcall(c)end end end end)"
-pcall(queueFunction,source)
+if type(url)~="string"or not url:match("^https?://")then return false end
+local queueFunction=getQueueOnTeleport()
+if not queueFunction then
+warn("[ WindUI ] AutoExecute is enabled, but this executor has no queue_on_teleport support")
+return false
 end
+local quotedUrl=string.format("%q",url)
+local queuedSource="task.spawn(function()local loaded=false for attempt=1,6 do if game:IsLoaded()then task.wait(1)end local ok,body=pcall(function()return game:HttpGet("..quotedUrl..")end) if ok and type(body)=='string'and#body>0 then local runner=loadstring or load local runOk=pcall(function()runner(body)()end) if runOk then loaded=true break end end task.wait(math.min(attempt*2,10)) end end)"
+local ok,err=pcall(queueFunction,queuedSource)
+if not ok then
+warn("[ WindUI ] Failed to queue AutoExecute: "..tostring(err))
 end
-if not aw.AutoRejoin then return end
-local player=ak.LocalPlayer
-if not player then return end
+return ok
+end
+local autoExecuteQueued=queueAutoExecute()
+if not aw.AutoReconnect then return end
+local reconnecting=false
+local reconnectAttempts=0
+local reconnectToken=0
+local maxReconnectAttempts=8
+local function scheduleReconnect(reason)
+if aw.Destroyed or reconnecting then return end
+if reconnectAttempts>=maxReconnectAttempts then
+warn("[ WindUI ] AutoReconnect stopped after "..tostring(maxReconnectAttempts).." attempts ("..tostring(reason or "unknown")..")")
+return
+end
+reconnecting=true
+reconnectAttempts+=1
+reconnectToken+=1
+local token=reconnectToken
+local waitTime=math.min(2+(reconnectAttempts-1)*2,14)
+task.delay(waitTime,function()
+if aw.Destroyed or token~=reconnectToken then reconnecting=false return end
+queueAutoExecute()
+local ok,err=pcall(function()
+atTeleportService:Teleport(game.PlaceId,ak.LocalPlayer)
+end)
+if not ok then
+reconnecting=false
+if reconnectAttempts<maxReconnectAttempts then task.defer(function()scheduleReconnect("Teleport error: "..tostring(err))end)end
+else
+task.delay(25,function()
+if token==reconnectToken and not aw.Destroyed then reconnecting=false end
+end)
+end
+end)
+end
+local function teleportFailed(reason)
+reconnecting=false
+scheduleReconnect(reason or "teleport failed")
+end
 pcall(function()
-an.AddSignal(atTeleportService.TeleportInitFailed,function(who)
-if who==player then pcall(function()atTeleportService:Teleport(game.PlaceId,player)end)end
+an.AddSignal(atTeleportService.TeleportInitFailed,function(player,result,message)
+if player==ak.LocalPlayer then teleportFailed(message or result)end
 end)
 end)
 pcall(function()
-an.AddSignal(player.OnTeleport,function(state)
-if state==Enum.TeleportState.Failed then pcall(function()atTeleportService:Teleport(game.PlaceId,player)end)end
+an.AddSignal(ak.LocalPlayer.OnTeleport,function(state)
+if state==Enum.TeleportState.Requested or state==Enum.TeleportState.Started or state==Enum.TeleportState.InProgress then
+queueAutoExecute()
+elseif state==Enum.TeleportState.Failed then
+teleportFailed("Player.OnTeleport failed")
+end
 end)
 end)
 pcall(function()
 local guiService=game:GetService("GuiService")
 an.AddSignal(guiService.ErrorMessageChanged,function(message)
-local text=string.lower(tostring(message or ""))
-if string.find(text,"disconnect",1,true)or string.find(text,"lost connection",1,true)or string.find(text,"server closed",1,true)then
-pcall(function()atTeleportService:Teleport(game.PlaceId,player)end)
+if type(message)=="string"and#message>0 then
+local lower=string.lower(message)
+if string.find(lower,"disconnect")or string.find(lower,"lost connection")or string.find(lower,"teleport")or string.find(lower,"server shutdown")or string.find(lower,"error code")or string.find(lower,"kicked")then
+teleportFailed("client error: "..message)
 end
+end
+end)
+end)
+pcall(function()
+an.AddSignal(ak.LocalPlayer.AncestryChanged,function(_,parent)
+if parent==nil then teleportFailed("local player removed")end
+end)
+end)
+pcall(function()
+an.AddSignal(ak.PlayerRemoving,function(player)
+if player==ak.LocalPlayer then teleportFailed("local player removing")end
 end)
 end)
 end
@@ -15685,26 +15746,6 @@ aa:SetTheme"Dark"
 aa:SetLanguage(as.Language)
 
 function aa.CreateWindow(az,aA)
-if aA==nil and type(az)=="table"then aA=az end
-aA=aA or{}
-local configOptions=aA.Configuration or aA.configuration
-if type(configOptions)=="table"then
-if not aA.Folder then aA.Folder=configOptions.Folder or configOptions.folder or configOptions.CustomFolder or configOptions.customFolder end
-if aA.AutoLoad==nil then
-local requested=configOptions.AutoLoad
-if requested==nil then requested=configOptions.autoLoad end
-if requested==true then aA.AutoLoad=configOptions.FileName or configOptions.fileName or "MainConfig"
-elseif requested==false then aA.AutoLoad=false
-elseif requested~=nil then aA.AutoLoad=requested
-elseif configOptions.FileName or configOptions.fileName then aA.AutoLoad=configOptions.FileName or configOptions.fileName end
-end
-if aA.AutoSave==nil then
-if configOptions.AutoSave~=nil then aA.AutoSave=configOptions.AutoSave
-elseif configOptions.autoSave~=nil then aA.AutoSave=configOptions.autoSave end
-end
-end
-if aA.AutoLoad==true then aA.AutoLoad=aA.FileName or aA.fileName or "MainConfig" end
-if aA.AutoLoad==nil then aA.AutoLoad="MainConfig" end
 local aB=a.load'ae'
 
 if not am:IsStudio()and writefile then
@@ -15823,6 +15864,18 @@ if aA.Acrylic then
 au.init()
 end
 
+if h.AutoSave and h.ConfigManager and h.CurrentConfig then
+    task.spawn(function()
+        while not h.Destroyed do
+            task.wait(1)
+            if h.AutoSave and h.CurrentConfig and not h.Destroyed then
+                pcall(function()
+                    h.CurrentConfig:Save()
+                end)
+            end
+        end
+    end)
+end
 
 
 
