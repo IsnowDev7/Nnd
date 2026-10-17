@@ -15859,13 +15859,6 @@ local h=aB(aA)
 aa.Transparent=aA.Transparent
 aa.Window=h
 
-if h.AutoLoad and h.ConfigManager and h.CurrentConfig then
-local autoLoadOk,autoLoadError=pcall(function()
-h.CurrentConfig:Load()
-end)
-if not autoLoadOk then warn("[ WindUI.ConfigManager ] AutoLoad failed: "..tostring(autoLoadError))end
-end
-
 if aA.Acrylic then
 au.init()
 end
