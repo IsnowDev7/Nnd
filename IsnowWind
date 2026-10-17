@@ -4954,7 +4954,9 @@ return false,"No config file is selected"
 end
 
 function ai.SetAsCurrent(aj)
-ad:SetCurrentConfig(ai)
+if ad then
+ad.CurrentConfig=ai
+end
 end
 
 function ai.Register(aj,ak,al)
