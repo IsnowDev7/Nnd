@@ -4954,10 +4954,6 @@ end
 end
 end
 
-if autoLoadName and tostring(autoLoadName)~="" and not ae.Configs[tostring(autoLoadName)] then
-    ae:CreateConfig(tostring(autoLoadName),true)
-end
-
 return ae
 end
 
@@ -14818,6 +14814,18 @@ end
 
 function aw.SetCurrentConfig(C,F)
 aw.CurrentConfig=F
+end
+if aw.ConfigManager and aw.AutoLoad~=nil then
+local autoLoadName=aw.AutoLoad
+if type(autoLoadName)=="table"then
+autoLoadName=autoLoadName.Name or autoLoadName.name or autoLoadName.Config or autoLoadName.config
+end
+if autoLoadName and tostring(autoLoadName)~=""then
+local autoConfig,autoError=aw.ConfigManager:CreateConfig(tostring(autoLoadName),true)
+if not autoConfig then
+warn("[ WindUI.ConfigManager ] Failed to initialize AutoLoad config '"..tostring(autoLoadName).."': "..tostring(autoError))
+end
+end
 end
 
 do
