@@ -13114,7 +13114,7 @@ CanDropdown=true,
 Closed=false,
 Parent=av.Parent,
 Destroyed=false,
-AutoReconnect=av.AutoReconnect==true,
+AutoReconnect=av.AutoReconnect==true or av.AutoRejoin==true,
 AutoExecute=av.AutoExecute,
 AutoLoad=av.AutoLoad or "MainConfig",
 AutoSave=true,
@@ -13146,60 +13146,103 @@ PendingFlags={},
 IsToggleDragging=false,
 }
 
--- Optional recovery helpers. These are isolated from the UI and are disabled by default.
+-- Recovery helpers: queue the configured loader before teleports and retry failed reconnects.
 local function setupRecovery()
 local function getQueueOnTeleport()
 local queueFunctions={rawget(_G,"queue_on_teleport"),rawget(_G,"queueonteleport")}
 if syn and type(syn.queue_on_teleport)=="function"then table.insert(queueFunctions,syn.queue_on_teleport)end
 if fluxus and type(fluxus.queue_on_teleport)=="function"then table.insert(queueFunctions,fluxus.queue_on_teleport)end
+if queue_on_teleport and type(queue_on_teleport)=="function"then table.insert(queueFunctions,queue_on_teleport)end
 for _,queueFunction in next,queueFunctions do
 if type(queueFunction)=="function"then return queueFunction end
 end
 end
 local function queueAutoExecute()
 local url=aw.AutoExecute
-if type(url)~="string"or not url:match("^https?://")then return end
+if type(url)~="string"or not url:match("^https?://")then return false end
 local queueFunction=getQueueOnTeleport()
-if not queueFunction then return end
-local queuedSource="local ok,body=pcall(function()return game:HttpGet("..string.format("%q",url)..")end);if ok and type(body)=='string'and body~=''then pcall(function()loadstring(body)()end)end"
-pcall(queueFunction,queuedSource)
+if not queueFunction then
+warn("[ WindUI ] AutoExecute is enabled, but this executor has no queue_on_teleport support")
+return false
 end
-queueAutoExecute()
+local quotedUrl=string.format("%q",url)
+local queuedSource="task.spawn(function()local loaded=false for attempt=1,6 do if game:IsLoaded()then task.wait(1)end local ok,body=pcall(function()return game:HttpGet("..quotedUrl..")end) if ok and type(body)=='string'and#body>0 then local runner=loadstring or load local runOk=pcall(function()runner(body)()end) if runOk then loaded=true break end end task.wait(math.min(attempt*2,10)) end end)"
+local ok,err=pcall(queueFunction,queuedSource)
+if not ok then
+warn("[ WindUI ] Failed to queue AutoExecute: "..tostring(err))
+end
+return ok
+end
+local autoExecuteQueued=queueAutoExecute()
 if not aw.AutoReconnect then return end
 local reconnecting=false
-local function reconnect()
-if reconnecting or aw.Destroyed then return end
+local reconnectAttempts=0
+local reconnectToken=0
+local maxReconnectAttempts=8
+local function scheduleReconnect(reason)
+if aw.Destroyed or reconnecting then return end
+if reconnectAttempts>=maxReconnectAttempts then
+warn("[ WindUI ] AutoReconnect stopped after "..tostring(maxReconnectAttempts).." attempts ("..tostring(reason or "unknown")..")")
+return
+end
 reconnecting=true
-task.delay(3,function()
-if aw.Destroyed then reconnecting=false return end
-local ok=pcall(function()
+reconnectAttempts+=1
+reconnectToken+=1
+local token=reconnectToken
+local waitTime=math.min(2+(reconnectAttempts-1)*2,14)
+task.delay(waitTime,function()
+if aw.Destroyed or token~=reconnectToken then reconnecting=false return end
+queueAutoExecute()
+local ok,err=pcall(function()
 atTeleportService:Teleport(game.PlaceId,ak.LocalPlayer)
 end)
 if not ok then
 reconnecting=false
+if reconnectAttempts<maxReconnectAttempts then task.defer(function()scheduleReconnect("Teleport error: "..tostring(err))end)end
 else
-task.delay(15,function()reconnecting=false end)
+task.delay(25,function()
+if token==reconnectToken and not aw.Destroyed then reconnecting=false end
+end)
 end
 end)
 end
+local function teleportFailed(reason)
+reconnecting=false
+scheduleReconnect(reason or "teleport failed")
+end
 pcall(function()
-an.AddSignal(atTeleportService.TeleportInitFailed,function(player)
-if player==ak.LocalPlayer then reconnect()end
+an.AddSignal(atTeleportService.TeleportInitFailed,function(player,result,message)
+if player==ak.LocalPlayer then teleportFailed(message or result)end
 end)
 end)
 pcall(function()
 an.AddSignal(ak.LocalPlayer.OnTeleport,function(state)
-if state==Enum.TeleportState.Failed then reconnect()end
+if state==Enum.TeleportState.Requested or state==Enum.TeleportState.Started or state==Enum.TeleportState.InProgress then
+queueAutoExecute()
+elseif state==Enum.TeleportState.Failed then
+teleportFailed("Player.OnTeleport failed")
+end
 end)
 end)
 pcall(function()
-an.AddSignal(ak.PlayerRemoving,function(player)
-if player==ak.LocalPlayer then reconnect()end
+local guiService=game:GetService("GuiService")
+an.AddSignal(guiService.ErrorMessageChanged,function(message)
+if type(message)=="string"and#message>0 then
+local lower=string.lower(message)
+if string.find(lower,"disconnect")or string.find(lower,"lost connection")or string.find(lower,"teleport")or string.find(lower,"server shutdown")or string.find(lower,"error code")or string.find(lower,"kicked")then
+teleportFailed("client error: "..message)
+end
+end
 end)
 end)
 pcall(function()
 an.AddSignal(ak.LocalPlayer.AncestryChanged,function(_,parent)
-if parent==nil then reconnect()end
+if parent==nil then teleportFailed("local player removed")end
+end)
+end)
+pcall(function()
+an.AddSignal(ak.PlayerRemoving,function(player)
+if player==ak.LocalPlayer then teleportFailed("local player removing")end
 end)
 end)
 end
