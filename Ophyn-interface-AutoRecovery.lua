@@ -2509,13 +2509,13 @@ function UI.new(options)
 		if teleportQueued and not force then return true end
 		local q = getQueueFunction()
 		if type(q) ~= "function" then return false end
-		local source = "task.spawn(function()local u=" .. string.format("%q", autoExecuteUrl) .. ";for a=1,8 do local ok,b=pcall(function()return game:HttpGet(u)end);if ok and type(b)=="string" and #b>0 then local f=loadstring or load;if type(f)=="function" then local ok2,c=pcall(f,b);if ok2 and type(c)=="function" then local ok3=pcall(c);if ok3 then break end end end end;task.wait(math.min(a*2,12))end end)"
+		local source = "task.spawn(function()local u=" .. string.format("%q", autoExecuteUrl) .. ";local f=loadstring or load;for a=1,8 do local ok,b=pcall(function()return game:HttpGet(u)end);if ok and type(b)=="string" and #b>0 and type(f)=="function" then local ok2,c=pcall(f,b);if ok2 and type(c)=="function" then local ok3=pcall(c);if ok3 then break end end end;task.wait(math.min(a*2,12))end end)"
 		local ok = pcall(q, source)
 		if ok then teleportQueued = true end
 		return ok
 	end
 
-	local function requestRejoin(reason)
+	local function requestRejoin()
 		if rejoinScheduled then return end
 		rejoinScheduled = true
 		task.spawn(function()
@@ -2532,22 +2532,17 @@ function UI.new(options)
 		end)
 	end
 
-	local function inspectError(message)
-		local text = string.lower(tostring(message or ""))
-		if string.find(text, "disconnect", 1, true) or string.find(text, "lost connection", 1, true) or string.find(text, "server closed", 1, true) or string.find(text, "shutdown", 1, true) or string.find(text, "error code 277", 1, true) or string.find(text, "error code 279", 1, true) or string.find(text, "error code 273", 1, true) or string.find(text, "kicked", 1, true) then
-			teleportQueued = false
-			requestRejoin(text)
-		end
+	if type(autoExecuteUrl) == "string" and autoExecuteUrl ~= "" then
+		queueAutoExecute(true)
 	end
 
-	if type(autoExecuteUrl) == "string" and autoExecuteUrl ~= "" then queueAutoExecute(true) end
 	if autoRejoin then
 		local teleportService = game:GetService("TeleportService")
 		local players = game:GetService("Players")
 		local player = players.LocalPlayer
 		pcall(function()
 			teleportService.TeleportInitFailed:Connect(function(who)
-				if who == player then teleportQueued = false; requestRejoin("TeleportInitFailed") end
+				if who == player then teleportQueued = false; requestRejoin() end
 			end)
 		end)
 		pcall(function()
@@ -2556,32 +2551,22 @@ function UI.new(options)
 					queueAutoExecute(false)
 				elseif state == Enum.TeleportState.Failed then
 					teleportQueued = false
-					requestRejoin("OnTeleport failed")
+					requestRejoin()
 				end
 			end)
 		end)
 		pcall(function()
-			local guiService = game:GetService("GuiService")
-			guiService.ErrorMessageChanged:Connect(inspectError)
-			guiService:GetPropertyChangedSignal("ErrorMessage"):Connect(function() inspectError(guiService.ErrorMessage) end)
-		end)
-		pcall(function()
 			player.AncestryChanged:Connect(function(_, parent)
-				if parent == nil then requestRejoin("player removed") end
+				if parent == nil then requestRejoin() end
 			end)
 		end)
 		pcall(function()
 			players.PlayerRemoving:Connect(function(who)
-				if who == player then requestRejoin("player removing") end
-			end)
-		end)
-		pcall(function()
-			local coreGui = game:GetService("CoreGui")
-			coreGui.DescendantAdded:Connect(function(object)
-				if object:IsA("TextLabel") or object:IsA("TextButton") then inspectError(object.Text) end
+				if who == player then requestRejoin() end
 			end)
 		end)
 	end
+
 	local HUB_NAME = tostring(cfg.Title)
 	local HUB_SUBTITLE = tostring(cfg.Description)
 	local FOLDER = cfg.Folder
