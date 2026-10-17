@@ -5365,32 +5365,32 @@ PaddingRight=UDim.new(0,4),
 })
 
 ag.Button=an
-local leftCircle=ac("Frame",{
-Name="NotificationHistoryButton",
-Size=UDim2.fromOffset(36,36),
-Position=UDim2.new(0,-44,0.5,0),
-AnchorPoint=Vector2.new(0,0.5),
-BackgroundColor3=Color3.new(0,0,0),
-BackgroundTransparency=0,
-ZIndex=100,
-Parent=al,
-},{
-ac("UICorner",{CornerRadius=UDim.new(1,0)}),
-})
-local rightCircle=ac("Frame",{
-Name="CloseWindowButton",
-Size=UDim2.fromOffset(36,36),
-Position=UDim2.new(1,8,0.5,0),
-AnchorPoint=Vector2.new(0,0.5),
-BackgroundColor3=Color3.new(0,0,0),
-BackgroundTransparency=0,
-ZIndex=100,
-Parent=al,
-},{
-ac("UICorner",{CornerRadius=UDim.new(1,0)}),
-})
-local leftButton=ac("ImageButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=ab.Icon("bell")[1],ImageRectSize=ab.Icon("bell")[2].ImageRectSize,ImageRectOffset=ab.Icon("bell")[2].ImageRectPosition,ThemeTag={ImageColor3="Icon"},ZIndex=101,Parent=leftCircle})
-local rightButton=ac("ImageButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=ab.Icon("trash")[1],ImageRectSize=ab.Icon("trash")[2].ImageRectSize,ImageRectOffset=ab.Icon("trash")[2].ImageRectPosition,ThemeTag={ImageColor3="Icon"},ZIndex=101,Parent=rightCircle})
+local leftCircle=ab.NewRoundFrame(999,"Squircle",{Name="NotificationHistoryButton",Size=UDim2.fromOffset(36,36),Position=UDim2.new(0,-44,0.5,0),AnchorPoint=Vector2.new(0,0.5),BackgroundTransparency=0,ZIndex=100,Parent=al},{ac("UIScale",{Scale=1,Parent=nil})})
+local rightCircle=ab.NewRoundFrame(999,"Squircle",{Name="CloseWindowButton",Size=UDim2.fromOffset(36,36),Position=UDim2.new(1,8,0.5,0),AnchorPoint=Vector2.new(0,0.5),BackgroundTransparency=0,ZIndex=100,Parent=al},{ac("UIScale",{Scale=1,Parent=nil})})
+local leftScale=leftCircle:FindFirstChildOfClass("UIScale")
+local rightScale=rightCircle:FindFirstChildOfClass("UIScale")
+if leftScale then leftScale.Parent=leftCircle end
+if rightScale then rightScale.Parent=rightCircle end
+local leftButton=ab.Image("bell","OpenButton:Bell",0,af,"OpenButtonBell",true,true)
+leftButton.Size=UDim2.fromOffset(18,18)
+leftButton.Position=UDim2.fromScale(0.5,0.5)
+leftButton.AnchorPoint=Vector2.new(0.5,0.5)
+leftButton.ZIndex=101
+leftButton.Parent=leftCircle
+local rightButton=ab.Image("trash","OpenButton:Trash",0,af,"OpenButtonTrash",true,true)
+rightButton.Size=UDim2.fromOffset(18,18)
+rightButton.Position=UDim2.fromScale(0.5,0.5)
+rightButton.AnchorPoint=Vector2.new(0.5,0.5)
+rightButton.ZIndex=101
+rightButton.Parent=rightCircle
+local function capsulePulse(button,scale)
+ ab.AddSignal(button.MouseEnter,function()ad(scale,.15,{Scale=1.04},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()end)
+ ab.AddSignal(button.MouseLeave,function()ad(scale,.2,{Scale=1},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()end)
+ ab.AddSignal(button.MouseButton1Down,function()ad(scale,.12,{Scale=1.09},Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()end)
+ ab.AddSignal(button.MouseButton1Up,function()ad(scale,.2,{Scale=1},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()end)
+end
+capsulePulse(leftButton,leftScale)
+capsulePulse(rightButton,rightScale)
 local historyPanel=ab.NewRoundFrame(18,"Squircle",{Name="NotificationHistoryPanel",Visible=false,Size=UDim2.fromOffset(292,250),Position=UDim2.new(0,-48,1,10),BackgroundTransparency=0,ZIndex=120,Parent=al},{ac("UIListLayout",{Padding=UDim.new(0,6),SortOrder=Enum.SortOrder.LayoutOrder,Parent=nil}),ac("UIPadding",{PaddingTop=UDim.new(0,12),PaddingBottom=UDim.new(0,12),PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})})
 local historyLayout=historyPanel:FindFirstChildOfClass("UIListLayout")
 if historyLayout then historyLayout.Parent=historyPanel end
@@ -5427,12 +5427,7 @@ local function showCloseDialog()
  af:Dialog{Title="Close Window ?",Content="This action cannot be canceled.",Buttons={{Title="No",Variant="Secondary"},{Title="Yes",Variant="Danger",Callback=function()af:Destroy()end}}}
 end
 ab.AddSignal(rightButton.MouseButton1Click,function()
- if af.Closed then
-  af:Open()
-  task.delay(.45,showCloseDialog)
- else
-  showCloseDialog()
- end
+ showCloseDialog()
 end)
 function ag.SetOpenButtonCirclesVisible(ao,ap)
  leftCircle.Visible=ap
@@ -14994,7 +14989,7 @@ Buttons=L.Buttons or{},
 
 TextPadding=14,
 }
-local N=H.Create(false,"Dialog",aw,av.WindUI,aw.UIElements.Main.Main)
+local N=H.Create(false,"Dialog",aw,av.WindUI,aw.Closed and av.WindUI.ScreenGui or aw.UIElements.Main.Main)
 
 N.UIElements.Main.Size=UDim2.new(0,M.Width,0,0)
 
