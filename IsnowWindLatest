@@ -13114,10 +13114,10 @@ CanDropdown=true,
 Closed=false,
 Parent=av.Parent,
 Destroyed=false,
-AutoReconnect=av.AutoReconnect==true or av.AutoRejoin==true,
+AutoRejoin=av.AutoRejoin==true,
 AutoExecute=av.AutoExecute,
-AutoLoad=av.AutoLoad or "MainConfig",
-AutoSave=true,
+AutoLoad=av.AutoLoad==nil and "MainConfig" or av.AutoLoad,
+AutoSave=av.AutoSave~=false,
 IsFullscreen=false,
 CanResize=av.Resizable~=false,
 IsOpenButtonEnabled=true,
@@ -13174,7 +13174,7 @@ end
 return ok
 end
 local autoExecuteQueued=queueAutoExecute()
-if not aw.AutoReconnect then return end
+if not aw.AutoRejoin then return end
 local reconnecting=false
 local reconnectAttempts=0
 local reconnectToken=0
@@ -13182,7 +13182,7 @@ local maxReconnectAttempts=8
 local function scheduleReconnect(reason)
 if aw.Destroyed or reconnecting then return end
 if reconnectAttempts>=maxReconnectAttempts then
-warn("[ WindUI ] AutoReconnect stopped after "..tostring(maxReconnectAttempts).." attempts ("..tostring(reason or "unknown")..")")
+warn("[ WindUI ] AutoRejoin stopped after "..tostring(maxReconnectAttempts).." attempts ("..tostring(reason or "unknown")..")")
 return
 end
 reconnecting=true
@@ -15742,8 +15742,26 @@ aa:SetTheme"Dark"
 aa:SetLanguage(as.Language)
 
 function aa.CreateWindow(az,aA)
-local aB=a.load'ae'
-
+if aA==nil and type(az)=="table"then aA=az end
+aA=aA or{}
+local configOptions=aA.Configuration or aA.configuration
+if type(configOptions)=="table"then
+if not aA.Folder then aA.Folder=configOptions.Folder or configOptions.folder or configOptions.CustomFolder or configOptions.customFolder end
+if aA.AutoLoad==nil then
+local requested=configOptions.AutoLoad
+if requested==nil then requested=configOptions.autoLoad end
+if requested==true then aA.AutoLoad=configOptions.FileName or configOptions.fileName or "MainConfig"
+elseif requested==false then aA.AutoLoad=false
+elseif requested~=nil then aA.AutoLoad=requested
+elseif configOptions.FileName or configOptions.fileName then aA.AutoLoad=configOptions.FileName or configOptions.fileName end
+end
+if aA.AutoSave==nil then
+if configOptions.AutoSave~=nil then aA.AutoSave=configOptions.AutoSave
+elseif configOptions.autoSave~=nil then aA.AutoSave=configOptions.autoSave end
+end
+end
+if aA.AutoLoad==true then aA.AutoLoad=aA.FileName or aA.fileName or "MainConfig" end
+if aA.AutoLoad==nil then aA.AutoLoad="MainConfig" end
 if not am:IsStudio()and writefile then
 if not isfolder"WindUI"then
 makefolder"WindUI"
