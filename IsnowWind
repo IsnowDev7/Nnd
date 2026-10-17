@@ -2633,7 +2633,7 @@ TextSize=18,
 
 local buttonNormalColor=ao.Squircle and ao.Squircle.ImageColor3
 local isCloseConfirmButton=(ah=="Danger" or ae=="Yes" or ae=="Close Window")
-if ah=="Primary" and isCloseConfirmButton and ao.Squircle then
+if (ah=="Primary" or ah=="Danger") and isCloseConfirmButton and ao.Squircle then
     buttonNormalColor=Color3.fromRGB(255,55,65)
     ao.Squircle.ImageColor3=buttonNormalColor
     ao.Squircle.ImageTransparency=0
@@ -2649,12 +2649,12 @@ ab.AddSignal(ao.MouseLeave,function()
 ad(ao.Frame,0.047,{ImageTransparency=1}):Play()
 end)
 ab.AddSignal(ao.InputBegan,function(input)
-if ah=="Primary" and isCloseConfirmButton and isActivationInput(input) and ao.Squircle then
+if (ah=="Primary" or ah=="Danger") and isCloseConfirmButton and isActivationInput(input) and ao.Squircle then
 ad(ao.Squircle,0.08,{ImageColor3=Color3.fromRGB(225,35,45)}):Play()
 end
 end)
 ab.AddSignal(ao.InputEnded,function(input)
-if ah=="Primary" and isCloseConfirmButton and isActivationInput(input) and ao.Squircle and buttonNormalColor then
+if (ah=="Primary" or ah=="Danger") and isCloseConfirmButton and isActivationInput(input) and ao.Squircle and buttonNormalColor then
 ad(ao.Squircle,0.12,{ImageColor3=buttonNormalColor}):Play()
 end
 end)
