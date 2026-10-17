@@ -13159,7 +13159,7 @@ end
 return ok
 end
 local autoExecuteQueued=queueAutoExecute()
-if not aw.AutoRejoin then return end
+if aw.AutoRejoin then
 local reconnecting=false
 local reconnectAttempts=0
 local reconnectToken=0
@@ -13230,6 +13230,7 @@ an.AddSignal(ak.PlayerRemoving,function(player)
 if player==ak.LocalPlayer then teleportFailed("local player removing")end
 end)
 end)
+end
 end
 setupRecovery()
 aw.UICorner=aw.Radius
