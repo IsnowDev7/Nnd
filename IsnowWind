@@ -2631,11 +2631,32 @@ TextSize=18,
 }),
 })
 
+local buttonNormalColor=ao.Squircle and ao.Squircle.ImageColor3
+local isCloseConfirmButton=(ae=="Yes" or ae=="Close Window")
+if ah=="Primary" and isCloseConfirmButton and ao.Squircle then
+    buttonNormalColor=Color3.fromRGB(255,55,65)
+    ao.Squircle.ImageColor3=buttonNormalColor
+    ao.Squircle.ImageTransparency=0
+end
+local function isActivationInput(input)
+return input.UserInputType==Enum.UserInputType.MouseButton1
+or input.UserInputType==Enum.UserInputType.Touch
+end
 ab.AddSignal(ao.MouseEnter,function()
 ad(ao.Frame,0.047,{ImageTransparency=0.95}):Play()
 end)
 ab.AddSignal(ao.MouseLeave,function()
 ad(ao.Frame,0.047,{ImageTransparency=1}):Play()
+end)
+ab.AddSignal(ao.InputBegan,function(input)
+if ah=="Primary" and isCloseConfirmButton and isActivationInput(input) and ao.Squircle then
+ad(ao.Squircle,0.08,{ImageColor3=Color3.fromRGB(225,35,45)}):Play()
+end
+end)
+ab.AddSignal(ao.InputEnded,function(input)
+if ah=="Primary" and isCloseConfirmButton and isActivationInput(input) and ao.Squircle and buttonNormalColor then
+ad(ao.Squircle,0.12,{ImageColor3=buttonNormalColor}):Play()
+end
 end)
 ab.AddSignal(ao.MouseButton1Click,function()
 if aj then
@@ -4933,6 +4954,10 @@ if ok and type(data)=="table"then
 ag.PendingConfigData=data.__elements or data.elements or data
 end
 end
+end
+
+if autoLoadName and tostring(autoLoadName)~="" and not ae.Configs[tostring(autoLoadName)] then
+    ae:CreateConfig(tostring(autoLoadName),true)
 end
 
 return ae
@@ -10039,7 +10064,7 @@ end)
 
 local H={
 {
-Title="Cancel",
+Title="No",
 Variant="Secondary",
 Callback=function()
 av.IsShowed=false
@@ -13040,7 +13065,7 @@ Icon=av.Icon,
 IconSize=av.IconSize or 22,
 IconThemed=av.IconThemed,
 IconRadius=av.IconRadius or 0,
-Folder=av.Folder,
+Folder=av.Folder or av.Title,
 Resizable=av.Resizable~=false,
 Background=av.Background,
 BackgroundImageTransparency=av.BackgroundImageTransparency or 0,
@@ -13084,7 +13109,8 @@ Parent=av.Parent,
 Destroyed=false,
 AutoReconnect=av.AutoReconnect==true,
 AutoExecute=av.AutoExecute,
-AutoLoad=av.AutoLoad,
+AutoLoad=av.AutoLoad or "MainConfig",
+AutoSave=true,
 IsFullscreen=false,
 CanResize=av.Resizable~=false,
 IsOpenButtonEnabled=true,
@@ -14768,19 +14794,18 @@ end
 end
 end
 
-if aw.OpenButtonMain and aw.OpenButtonMain.Button and aw.OpenButtonMain.Button.TextButton then
-local openButton=aw.OpenButtonMain.Button.TextButton
+if aw.OpenButtonMain and aw.OpenButtonMain.Button then
+local openButton=aw.OpenButtonMain.Button:FindFirstChild("TextButton")
+if openButton and openButton:IsA("TextButton") then
 openButton.Active=true
 openButton.Selectable=true
 openButton.ZIndex=100
-an.AddSignal(openButton.InputBegan,function(input)
-local inputType=input.UserInputType
-if inputType==Enum.UserInputType.MouseButton1 or inputType==Enum.UserInputType.Touch or inputType==Enum.UserInputType.Gamepad1 then
+an.AddSignal(openButton.Activated,function()
 if aw.Closed and not aw.Destroyed then
 aw:Open()
 end
-end
 end)
+end
 end
 
 an.AddSignal(af.InputBegan,function(C,F)
@@ -15096,11 +15121,11 @@ J=true
 
 aw:Dialog{
 
-Title="Close Window",
-Content="Do you want to close this window? You will not be able to open it again.",
+Title="Close Window ?",
+Content="This action cannot be canceled.",
 Buttons={
 {
-Title="Cancel",
+Title="No",
 
 Callback=function()
 J=false
@@ -15108,11 +15133,11 @@ end,
 Variant="Secondary",
 },
 {
-Title="Close Window",
+Title="Yes",
 
 Callback=function()
 J=false
-aw:Destroy()
+aw:Close()
 end,
 Variant="Primary",
 },
@@ -15778,6 +15803,19 @@ aa.Window=h
 
 if aA.Acrylic then
 au.init()
+end
+
+if h.AutoSave and h.ConfigManager and h.CurrentConfig then
+    task.spawn(function()
+        while not h.Destroyed do
+            task.wait(1)
+            if h.AutoSave and h.CurrentConfig and not h.Destroyed then
+                pcall(function()
+                    h.CurrentConfig:Save()
+                end)
+            end
+        end
+    end)
 end
 
 
