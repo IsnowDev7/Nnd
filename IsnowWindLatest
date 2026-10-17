@@ -13116,7 +13116,7 @@ Parent=av.Parent,
 Destroyed=false,
 AutoRejoin=av.AutoRejoin==true,
 AutoExecute=av.AutoExecute,
-AutoLoad=av.AutoLoad or "MainConfig",
+AutoLoad=av.AutoLoad==nil and "MainConfig" or av.AutoLoad,
 AutoSave=av.AutoSave~=false,
 IsFullscreen=false,
 CanResize=av.Resizable~=false,
@@ -15769,7 +15769,9 @@ aa:SetTheme"Dark"
 aa:SetLanguage(as.Language)
 
 function aa.CreateWindow(az,aA)
+if aA==nil and type(az)=="table"then aA=az end
 aA=aA or{}
+if aA.AutoLoad==true then aA.AutoLoad=aA.FileName or aA.fileName or "MainConfig" end
 local aB=a.load'ae'
 local configOptions=aA.Configuration or aA.configuration
 if type(configOptions)=="table"then
