@@ -13065,6 +13065,7 @@ Parent=av.Parent,
 Destroyed=false,
 AutoReconnect=av.AutoReconnect==true,
 AutoExecute=av.AutoExecute,
+AutoLoad=av.AutoLoad,
 IsFullscreen=false,
 CanResize=av.Resizable~=false,
 IsOpenButtonEnabled=true,
@@ -13199,6 +13200,22 @@ CornerRadius=UDim.new(0,aw.UICorner),
 
 if aw.Folder then
 aw.ConfigManager=au:Init(aw)
+if aw.ConfigManager and aw.AutoLoad~=nil then
+local autoLoadName
+if type(aw.AutoLoad)=="string"then
+ autoLoadName=aw.AutoLoad
+elseif type(aw.AutoLoad)=="table"then
+ autoLoadName=aw.AutoLoad.Name or aw.AutoLoad.name or aw.AutoLoad.Config or aw.AutoLoad.config
+end
+if autoLoadName and tostring(autoLoadName)~=''then
+local autoConfig,autoError=aw.ConfigManager:CreateConfig(tostring(autoLoadName),true)
+if not autoConfig then
+warn("[ WindUI.ConfigManager ] Failed to create AutoLoad config '"..tostring(autoLoadName).."': "..tostring(autoError))
+end
+else
+warn("[ WindUI.ConfigManager ] AutoLoad requires a config name, for example AutoLoad = 'MainConfig'.")
+end
+end
 end
 
 if aw.Acrylic then local
@@ -14754,11 +14771,18 @@ end
 end
 end
 
-if aw.OpenButtonMain and aw.OpenButtonMain.Button then
-an.AddSignal(aw.OpenButtonMain.Button.TextButton.MouseButton1Click,function()
-
-
+if aw.OpenButtonMain and aw.OpenButtonMain.Button and aw.OpenButtonMain.Button.TextButton then
+local openButton=aw.OpenButtonMain.Button.TextButton
+openButton.Active=true
+openButton.Selectable=true
+openButton.ZIndex=100
+an.AddSignal(openButton.InputBegan,function(input)
+local inputType=input.UserInputType
+if inputType==Enum.UserInputType.MouseButton1 or inputType==Enum.UserInputType.Touch or inputType==Enum.UserInputType.Gamepad1 then
+if aw.Closed and not aw.Destroyed then
 aw:Open()
+end
+end
 end)
 end
 
