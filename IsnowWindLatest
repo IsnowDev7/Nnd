@@ -13272,7 +13272,8 @@ end)
 end)
 end)
 end
-setupRecovery()
+local recoveryOk,recoveryError=pcall(setupRecovery)
+if not recoveryOk then warn("[ WindUI ] Recovery initialization skipped: "..tostring(recoveryError))end
 aw.UICorner=aw.Radius
 
 aw.TopBarButtonIconSize=aw.TopBarButtonIconSize or(aw.Topbar.ButtonsType=="Mac"and 11 or 16)
@@ -15768,6 +15769,7 @@ aa:SetTheme"Dark"
 aa:SetLanguage(as.Language)
 
 function aa.CreateWindow(az,aA)
+aA=aA or{}
 local aB=a.load'ae'
 local configOptions=aA.Configuration or aA.configuration
 if type(configOptions)=="table"then
