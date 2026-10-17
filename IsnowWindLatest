@@ -13151,9 +13151,9 @@ local function setupRecovery()
 local function resolveAutoExecuteUrl()
 local option=aw.AutoExecute
 if option==nil or option==false then return nil end
-local env=nil
+local env=_G
 pcall(function()
-env=if typeof(getgenv)=="function"then getgenv()else _G
+if type(getgenv)=="function"then env=getgenv()end
 end)
 if option==true or option=="scriptlink"then
 if type(env)=="table"then return env.RayfieldAutoExecuteUrl or env.AutoExecuteScript or env.ScriptLink end
