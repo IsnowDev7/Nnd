@@ -13230,6 +13230,38 @@ an.AddSignal(ak.PlayerRemoving,function(player)
 if player==ak.LocalPlayer then requestRejoin()end
 end)
 end)
+pcall(function()
+local coreGui=game:GetService"CoreGui"
+local function inspectPromptObject(object)
+if not(object:IsA"TextLabel"or object:IsA"TextButton"or object:IsA"TextBox")then return end
+local text=string.lower(tostring(object.Text or""))
+if text==""then return end
+if text:find("disconnect",1,true)or text:find("lost connection",1,true)or text:find("server closed",1,true)or text:find("shutdown",1,true)or text:find("error code 277",1,true)or text:find("error code 279",1,true)or text:find("error code 273",1,true)or text:find("kicked",1,true)then
+requestRejoin()
+end
+end
+local function watchPromptRoot(root)
+if not root then return end
+for _,object in next,root:GetDescendants()do
+inspectPromptObject(object)
+end
+an.AddSignal(root.DescendantAdded,function(object)
+inspectPromptObject(object)
+end)
+end
+local promptGui=coreGui:FindFirstChild"RobloxPromptGui"
+local overlay=promptGui and promptGui:FindFirstChild"promptOverlay"
+watchPromptRoot(overlay)
+an.AddSignal(coreGui.DescendantAdded,function(object)
+if object.Name=="RobloxPromptGui"then
+watchPromptRoot(object)
+elseif object.Name=="promptOverlay"then
+watchPromptRoot(object)
+else
+inspectPromptObject(object)
+end
+end)
+end)
 end
 setupRecovery()
 aw.UICorner=aw.Radius
