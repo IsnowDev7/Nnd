@@ -2491,6 +2491,70 @@ function UI.new(options)
 		cfg[k] = v
 	end
 
+	local autoExecuteUrl = cfg.AutoExecute
+	local autoRejoin = cfg.AutoRejoin == true or cfg.AutoReconnect == true
+	local teleportQueued = false
+	local rejoinPending = false
+
+	local function getQueueFunction()
+		local q = rawget(_G, "queue_on_teleport") or rawget(_G, "queueonteleport")
+		if type(q) == "function" then return q end
+		if syn and type(syn.queue_on_teleport) == "function" then return syn.queue_on_teleport end
+		if fluxus and type(fluxus.queue_on_teleport) == "function" then return fluxus.queue_on_teleport end
+		return nil
+	end
+
+	local function queueAutoExecute(force)
+		if type(autoExecuteUrl) ~= "string" or autoExecuteUrl == "" then return false end
+		if teleportQueued and not force then return false end
+		local q = getQueueFunction()
+		if type(q) ~= "function" then return false end
+		teleportQueued = true
+		local source = "task.spawn(function()local u=" .. string.format("%q", autoExecuteUrl) .. ";local ok,b=pcall(function()return game:HttpGet(u)end);if ok and type(b)=="string" and #b>0 then local f=loadstring or load;if type(f)=="function" then local ok2,c=pcall(f,b);if ok2 and type(c)=="function" then pcall(c)end end end end)"
+		return pcall(q, source)
+	end
+
+	local function requestRejoin()
+		if rejoinPending then return end
+		rejoinPending = true
+		task.delay(2, function()
+			rejoinPending = false
+			pcall(function()
+				local players = game:GetService("Players")
+				game:GetService("TeleportService"):Teleport(game.PlaceId, players.LocalPlayer)
+			end)
+		end)
+	end
+
+	if type(autoExecuteUrl) == "string" and autoExecuteUrl ~= "" then queueAutoExecute(true) end
+	if autoRejoin then
+		local teleportService = game:GetService("TeleportService")
+		local player = game:GetService("Players").LocalPlayer
+		pcall(function()
+			teleportService.TeleportInitFailed:Connect(function(who)
+				if who == player then teleportQueued = false; requestRejoin() end
+			end)
+		end)
+		pcall(function()
+			player.OnTeleport:Connect(function(state)
+				if state == Enum.TeleportState.Requested or state == Enum.TeleportState.Started or state == Enum.TeleportState.InProgress then
+					queueAutoExecute(false)
+				elseif state == Enum.TeleportState.Failed then
+					teleportQueued = false
+					requestRejoin()
+				end
+			end)
+		end)
+		pcall(function()
+			game:GetService("GuiService").ErrorMessageChanged:Connect(function(message)
+				local text = string.lower(tostring(message or ""))
+				if string.find(text, "disconnect", 1, true) or string.find(text, "lost connection", 1, true) or string.find(text, "server closed", 1, true) or string.find(text, "error code 277", 1, true) or string.find(text, "error code 279", 1, true) then
+					teleportQueued = false
+					requestRejoin()
+				end
+			end)
+		end)
+	end
 	local HUB_NAME = tostring(cfg.Title)
 	local HUB_SUBTITLE = tostring(cfg.Description)
 	local FOLDER = cfg.Folder
