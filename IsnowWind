@@ -15141,7 +15141,7 @@ Title="Yes",
 
 Callback=function()
 J=false
-aw:Close()
+aw:Destroy()
 end,
 Variant="Danger",
 },
