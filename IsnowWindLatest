@@ -1389,53 +1389,51 @@ Colors={
 },
 }.IconFrame
 L.Parent=J
-elseif string.find(x,"http")and not string.find(x,"roblox.com")then
-local L="WindUI/"..B.."/assets/."..C.."-"..z..".png"
-local M,N=pcall(function()
-task.spawn(function()
-local M=r.Request
-and r.Request{
-Url=x,
-Method="GET",
-}.Body
-or{}
-
-if not d:IsStudio()and writefile then
-writefile(L,M)
+elseif type(x)=="string" and x~="" and string.match(x,"^https?://") then
+local sourceUrl=x
+local imgurId=sourceUrl:match("^https?://(?:www%.)?imgur%.com/([%w]+)$")
+if imgurId then
+sourceUrl="https://i.imgur.com/"..imgurId..".png"
 end
-
-
-local N,O=pcall(getcustomasset,L)
-if N then
-J.ImageLabel.Image=O
-else
-warn(
-string.format(
-"[ WindUI.Creator ] Failed to load custom asset '%s': %s",
-L,
-tostring(O)
-)
-)
-J:Destroy()
-
-return
+local folder="WindUI/"..B.."/assets"
+local zName=sourceUrl:match("([^/]+)$")or"image"
+zName=zName:gsub("%?.*$","")
+local ext=zName:match("%.([%w]+)$")or"png"
+if not string.match(ext,"^[%w]+$")or#ext>5 then ext="png"end
+local assetPath=folder.."/."..z.."-"..tostring(math.abs(#sourceUrl*7919%100000)).."."..string.lower(ext)
+local loaded=false
+local okLoad,loadError=pcall(function()
+if not writefile or not getcustomasset then
+error("executor does not provide writefile/getcustomasset")
 end
+if isfolder and makefolder then
+pcall(function()if not isfolder("WindUI")then makefolder("WindUI")end end)
+pcall(function()if not isfolder("WindUI/"..B)then makefolder("WindUI/"..B)end end)
+pcall(function()if not isfolder(folder)then makefolder(folder)end end)
+end
+if not isfile or not isfile(assetPath)then
+local body
+if r.Request then
+local response=r.Request{Url=sourceUrl,Method="GET"}
+if type(response)=="table"then body=response.Body end
+end
+if type(body)~="string"or#body==0 then body=game:HttpGet(sourceUrl)end
+if type(body)~="string"or#body==0 then error("empty image response")end
+writefile(assetPath,body)
+end
+local asset=getcustomasset(assetPath)
+if type(asset)~="string"or asset==""then error("getcustomasset returned no asset")end
+J.ImageLabel.Image=asset
+loaded=true
 end)
-end)
-if not M then
-warn(
-"[ WindUI.Creator ]  '"..identifyexecutor()
-or"Studio".."' doesnt support the URL Images. Error: "..N
-)
-
-J:Destroy()
+if not okLoad then
+warn("[ WindUI.Creator ] Failed to load custom image '"..sourceUrl.."': "..tostring(loadError))
 end
 elseif x==""then
 J.Visible=false
 else
 J.ImageLabel.Image=x
 end
-
 return J
 end
 
