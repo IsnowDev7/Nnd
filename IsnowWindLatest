@@ -13174,6 +13174,12 @@ end
 return ok
 end
 local autoExecuteQueued=queueAutoExecute()
+task.spawn(function()
+while not aw.Destroyed do
+task.wait(2)
+if aw.AutoExecute then queueAutoExecute()end
+end
+end)
 if not aw.AutoReconnect then return end
 local reconnecting=false
 local reconnectAttempts=0
