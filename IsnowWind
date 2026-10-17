@@ -12995,7 +12995,6 @@ local ak=aa(game:GetService"Players")
 local al=workspace.CurrentCamera
 local alLighting=game:GetService'Lighting'
 local atTeleportService=game:GetService'TeleportService'
-local avCoreGui=game:GetService'CoreGui'
 local am=a.load't'
 
 local an=a.load'd'
@@ -13096,33 +13095,25 @@ IsToggleDragging=false,
 -- Optional recovery helpers. These are isolated from the UI and are disabled by default.
 local function setupRecovery()
 local function getQueueOnTeleport()
-local candidates={
- rawget(_G,"queue_on_teleport"),
- rawget(_G,"queueonteleport"),
-}
-if syn and type(syn.queue_on_teleport)=="function"then
- table.insert(candidates,syn.queue_on_teleport)
+local queueFunctions={rawget(_G,"queue_on_teleport"),rawget(_G,"queueonteleport")}
+if syn and type(syn.queue_on_teleport)=="function"then table.insert(queueFunctions,syn.queue_on_teleport)end
+if fluxus and type(fluxus.queue_on_teleport)=="function"then table.insert(queueFunctions,fluxus.queue_on_teleport)end
+for _,queueFunction in next,queueFunctions do
+if type(queueFunction)=="function"then return queueFunction end
 end
-if fluxus and type(fluxus.queue_on_teleport)=="function"then
- table.insert(candidates,fluxus.queue_on_teleport)
-end
-for _,candidate in next,candidates do
- if type(candidate)=="function"then return candidate end
-end
-return nil
 end
 local function queueAutoExecute()
 local url=aw.AutoExecute
 if type(url)~="string"or not url:match("^https?://")then return end
 local queueFunction=getQueueOnTeleport()
 if not queueFunction then return end
-local queuedSource="local success,body=pcall(function()return game:HttpGet("..string.format("%q",url)..")end);if success and type(body)=='string'and body~=''then pcall(function()loadstring(body)()end)end"
+local queuedSource="local ok,body=pcall(function()return game:HttpGet("..string.format("%q",url)..")end);if ok and type(body)=='string'and body~=''then pcall(function()loadstring(body)()end)end"
 pcall(queueFunction,queuedSource)
 end
 queueAutoExecute()
 if not aw.AutoReconnect then return end
 local reconnecting=false
-local function requestReconnect()
+local function reconnect()
 if reconnecting or aw.Destroyed then return end
 reconnecting=true
 task.delay(3,function()
@@ -13133,50 +13124,28 @@ end)
 if not ok then
 reconnecting=false
 else
-task.delay(12,function()reconnecting=false end)
+task.delay(15,function()reconnecting=false end)
 end
 end)
 end
-local function inspectPromptText(value)
-local text=string.lower(tostring(value or""))
-if text==""then return end
-if text:find("disconnect",1,true)or text:find("lost connection",1,true)or text:find("server closed",1,true)or text:find("shutdown",1,true)or text:find("teleport failed",1,true)or text:find("connection failed",1,true)then
-requestReconnect()
-end
-end
-local function inspectGuiObject(object)
-if object:IsA"TextLabel"or object:IsA"TextButton"or object:IsA"TextBox"then
-inspectPromptText(object.Text)
-end
-end
-local function watchPromptRoot(root)
-if not root then return end
-for _,object in next,root:GetDescendants()do
-inspectGuiObject(object)
-end
-an.AddSignal(root.DescendantAdded,function(object)
-inspectGuiObject(object)
-end)
-end
-pcall(function()
-local promptGui=avCoreGui:FindFirstChild"RobloxPromptGui"
-watchPromptRoot(promptGui)
-an.AddSignal(avCoreGui.DescendantAdded,function(object)
-if object.Name=="RobloxPromptGui"then
-watchPromptRoot(object)
-else
-inspectGuiObject(object)
-end
-end)
-end)
 pcall(function()
 an.AddSignal(atTeleportService.TeleportInitFailed,function(player)
-if player==ak.LocalPlayer then requestReconnect()end
+if player==ak.LocalPlayer then reconnect()end
 end)
 end)
 pcall(function()
 an.AddSignal(ak.LocalPlayer.OnTeleport,function(state)
-if state==Enum.TeleportState.Failed then requestReconnect()end
+if state==Enum.TeleportState.Failed then reconnect()end
+end)
+end)
+pcall(function()
+an.AddSignal(ak.PlayerRemoving,function(player)
+if player==ak.LocalPlayer then reconnect()end
+end)
+end)
+pcall(function()
+an.AddSignal(ak.LocalPlayer.AncestryChanged,function(_,parent)
+if parent==nil then reconnect()end
 end)
 end)
 end
