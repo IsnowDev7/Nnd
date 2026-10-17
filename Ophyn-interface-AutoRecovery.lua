@@ -2494,7 +2494,7 @@ function UI.new(options)
 	local autoExecuteUrl = cfg.AutoExecute
 	local autoRejoin = cfg.AutoRejoin == true or cfg.AutoReconnect == true
 	local teleportQueued = false
-	local rejoinPending = false
+	local rejoinScheduled = false
 
 	local function getQueueFunction()
 		local q = rawget(_G, "queue_on_teleport") or rawget(_G, "queueonteleport")
@@ -2506,33 +2506,48 @@ function UI.new(options)
 
 	local function queueAutoExecute(force)
 		if type(autoExecuteUrl) ~= "string" or autoExecuteUrl == "" then return false end
-		if teleportQueued and not force then return false end
+		if teleportQueued and not force then return true end
 		local q = getQueueFunction()
 		if type(q) ~= "function" then return false end
-		teleportQueued = true
-		local source = "task.spawn(function()local u=" .. string.format("%q", autoExecuteUrl) .. ";local ok,b=pcall(function()return game:HttpGet(u)end);if ok and type(b)=="string" and #b>0 then local f=loadstring or load;if type(f)=="function" then local ok2,c=pcall(f,b);if ok2 and type(c)=="function" then pcall(c)end end end end)"
-		return pcall(q, source)
+		local source = "task.spawn(function()local u=" .. string.format("%q", autoExecuteUrl) .. ";for a=1,8 do local ok,b=pcall(function()return game:HttpGet(u)end);if ok and type(b)=="string" and #b>0 then local f=loadstring or load;if type(f)=="function" then local ok2,c=pcall(f,b);if ok2 and type(c)=="function" then local ok3=pcall(c);if ok3 then break end end end end;task.wait(math.min(a*2,12))end end)"
+		local ok = pcall(q, source)
+		if ok then teleportQueued = true end
+		return ok
 	end
 
-	local function requestRejoin()
-		if rejoinPending then return end
-		rejoinPending = true
-		task.delay(2, function()
-			rejoinPending = false
-			pcall(function()
-				local players = game:GetService("Players")
-				game:GetService("TeleportService"):Teleport(game.PlaceId, players.LocalPlayer)
-			end)
+	local function requestRejoin(reason)
+		if rejoinScheduled then return end
+		rejoinScheduled = true
+		task.spawn(function()
+			task.wait(2)
+			for attempt = 1, 5 do
+				local ok = pcall(function()
+					local players = game:GetService("Players")
+					game:GetService("TeleportService"):Teleport(game.PlaceId, players.LocalPlayer)
+				end)
+				if ok then break end
+				task.wait(math.min(attempt * 3, 12))
+			end
+			task.delay(15, function() rejoinScheduled = false end)
 		end)
+	end
+
+	local function inspectError(message)
+		local text = string.lower(tostring(message or ""))
+		if string.find(text, "disconnect", 1, true) or string.find(text, "lost connection", 1, true) or string.find(text, "server closed", 1, true) or string.find(text, "shutdown", 1, true) or string.find(text, "error code 277", 1, true) or string.find(text, "error code 279", 1, true) or string.find(text, "error code 273", 1, true) or string.find(text, "kicked", 1, true) then
+			teleportQueued = false
+			requestRejoin(text)
+		end
 	end
 
 	if type(autoExecuteUrl) == "string" and autoExecuteUrl ~= "" then queueAutoExecute(true) end
 	if autoRejoin then
 		local teleportService = game:GetService("TeleportService")
-		local player = game:GetService("Players").LocalPlayer
+		local players = game:GetService("Players")
+		local player = players.LocalPlayer
 		pcall(function()
 			teleportService.TeleportInitFailed:Connect(function(who)
-				if who == player then teleportQueued = false; requestRejoin() end
+				if who == player then teleportQueued = false; requestRejoin("TeleportInitFailed") end
 			end)
 		end)
 		pcall(function()
@@ -2541,17 +2556,29 @@ function UI.new(options)
 					queueAutoExecute(false)
 				elseif state == Enum.TeleportState.Failed then
 					teleportQueued = false
-					requestRejoin()
+					requestRejoin("OnTeleport failed")
 				end
 			end)
 		end)
 		pcall(function()
-			game:GetService("GuiService").ErrorMessageChanged:Connect(function(message)
-				local text = string.lower(tostring(message or ""))
-				if string.find(text, "disconnect", 1, true) or string.find(text, "lost connection", 1, true) or string.find(text, "server closed", 1, true) or string.find(text, "error code 277", 1, true) or string.find(text, "error code 279", 1, true) then
-					teleportQueued = false
-					requestRejoin()
-				end
+			local guiService = game:GetService("GuiService")
+			guiService.ErrorMessageChanged:Connect(inspectError)
+			guiService:GetPropertyChangedSignal("ErrorMessage"):Connect(function() inspectError(guiService.ErrorMessage) end)
+		end)
+		pcall(function()
+			player.AncestryChanged:Connect(function(_, parent)
+				if parent == nil then requestRejoin("player removed") end
+			end)
+		end)
+		pcall(function()
+			players.PlayerRemoving:Connect(function(who)
+				if who == player then requestRejoin("player removing") end
+			end)
+		end)
+		pcall(function()
+			local coreGui = game:GetService("CoreGui")
+			coreGui.DescendantAdded:Connect(function(object)
+				if object:IsA("TextLabel") or object:IsA("TextButton") then inspectError(object.Text) end
 			end)
 		end)
 	end
