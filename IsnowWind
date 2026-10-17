@@ -12995,7 +12995,6 @@ local ak=aa(game:GetService"Players")
 local al=workspace.CurrentCamera
 local alLighting=game:GetService'Lighting'
 local atTeleportService=game:GetService'TeleportService'
-local auGuiService=game:GetService'GuiService'
 local avCoreGui=game:GetService'CoreGui'
 local am=a.load't'
 
@@ -13097,20 +13096,28 @@ IsToggleDragging=false,
 -- Optional recovery helpers. These are isolated from the UI and are disabled by default.
 local function setupRecovery()
 local function getQueueOnTeleport()
-local q=queue_on_teleport
-if type(q)=="function"then return q end
-if syn and type(syn.queue_on_teleport)=="function"then return syn.queue_on_teleport end
-if fluxus and type(fluxus.queue_on_teleport)=="function"then return fluxus.queue_on_teleport end
-if type(queueonteleport)=="function"then return queueonteleport end
+local candidates={
+ rawget(_G,"queue_on_teleport"),
+ rawget(_G,"queueonteleport"),
+}
+if syn and type(syn.queue_on_teleport)=="function"then
+ table.insert(candidates,syn.queue_on_teleport)
+end
+if fluxus and type(fluxus.queue_on_teleport)=="function"then
+ table.insert(candidates,fluxus.queue_on_teleport)
+end
+for _,candidate in next,candidates do
+ if type(candidate)=="function"then return candidate end
+end
 return nil
 end
 local function queueAutoExecute()
 local url=aw.AutoExecute
 if type(url)~="string"or not url:match("^https?://")then return end
-local q=getQueueOnTeleport()
-if not q then return end
-local source=string.format("local ok,src=pcall(function()return game:HttpGet(%q)end);if ok and type(src)=='string'and src~=''then pcall(function()loadstring(src)()end)end",url)
-pcall(q,source)
+local queueFunction=getQueueOnTeleport()
+if not queueFunction then return end
+local queuedSource="local success,body=pcall(function()return game:HttpGet("..string.format("%q",url)..")end);if success and type(body)=='string'and body~=''then pcall(function()loadstring(body)()end)end"
+pcall(queueFunction,queuedSource)
 end
 queueAutoExecute()
 if not aw.AutoReconnect then return end
@@ -13119,10 +13126,9 @@ local function requestReconnect()
 if reconnecting or aw.Destroyed then return end
 reconnecting=true
 task.delay(3,function()
-if aw.Destroyed then return end
-local player=ak.LocalPlayer
+if aw.Destroyed then reconnecting=false return end
 local ok=pcall(function()
-atTeleportService:Teleport(game.PlaceId,player)
+atTeleportService:Teleport(game.PlaceId,ak.LocalPlayer)
 end)
 if not ok then
 reconnecting=false
@@ -13131,34 +13137,46 @@ task.delay(12,function()reconnecting=false end)
 end
 end)
 end
-an.AddSignal(atTeleportService.TeleportInitFailed,function(player)
-if player==ak.LocalPlayer then requestReconnect()end
-end)
-an.AddSignal(ak.LocalPlayer.OnTeleport,function(state)
-if state==Enum.TeleportState.Failed then requestReconnect()end
-end)
-local function inspectMessage(message)
-local text=string.lower(tostring(message or""))
-if text:find("disconnect",1,true)or text:find("lost connection",1,true)or text:find("server closed",1,true)or text:find("shutdown",1,true)or text:find("teleport failed",1,true)then
+local function inspectPromptText(value)
+local text=string.lower(tostring(value or""))
+if text==""then return end
+if text:find("disconnect",1,true)or text:find("lost connection",1,true)or text:find("server closed",1,true)or text:find("shutdown",1,true)or text:find("teleport failed",1,true)or text:find("connection failed",1,true)then
 requestReconnect()
 end
 end
-local function watchPromptOverlay(overlay)
-if not overlay then return end
-an.AddSignal(overlay.DescendantAdded,function(object)
-if object:IsA"TextLabel"or object:IsA"TextButton"then inspectMessage(object.Text)end
+local function inspectGuiObject(object)
+if object:IsA"TextLabel"or object:IsA"TextButton"or object:IsA"TextBox"then
+inspectPromptText(object.Text)
+end
+end
+local function watchPromptRoot(root)
+if not root then return end
+for _,object in next,root:GetDescendants()do
+inspectGuiObject(object)
+end
+an.AddSignal(root.DescendantAdded,function(object)
+inspectGuiObject(object)
 end)
 end
 pcall(function()
 local promptGui=avCoreGui:FindFirstChild"RobloxPromptGui"
-local overlay=promptGui and promptGui:FindFirstChild"promptOverlay"
-watchPromptOverlay(overlay)
+watchPromptRoot(promptGui)
 an.AddSignal(avCoreGui.DescendantAdded,function(object)
-if object.Name=="promptOverlay"then
-watchPromptOverlay(object)
-elseif object:IsA"TextLabel"or object:IsA"TextButton"then
-inspectMessage(object.Text)
+if object.Name=="RobloxPromptGui"then
+watchPromptRoot(object)
+else
+inspectGuiObject(object)
 end
+end)
+end)
+pcall(function()
+an.AddSignal(atTeleportService.TeleportInitFailed,function(player)
+if player==ak.LocalPlayer then requestReconnect()end
+end)
+end)
+pcall(function()
+an.AddSignal(ak.LocalPlayer.OnTeleport,function(state)
+if state==Enum.TeleportState.Failed then requestReconnect()end
 end)
 end)
 end
