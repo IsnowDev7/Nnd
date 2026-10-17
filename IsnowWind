@@ -14474,7 +14474,7 @@ end)
 end
 
 task.wait(0.06)
-if aw.Closed or aw.Destroyed then return end
+if aw.Destroyed then return end
 aw.Closed=false
 
 aw.UIElements.Main.Size=UDim2.new(aw.Size.X.Scale,aw.Size.X.Offset,0,100)
@@ -14654,6 +14654,11 @@ end
 end)
 
 function F.Destroy(G)
+if aw.OpenButtonMain then
+    aw.OpenButtonMain:Visible(false)
+end
+aw.Closed=true
+aw.Destroyed=true
 task.spawn(function()
 if aw.OnDestroyCallback then
 task.spawn(function()
@@ -14665,7 +14670,6 @@ if aw.AcrylicPaint and aw.AcrylicPaint.Model then
 aw.AcrylicPaint.Model:Destroy()
 end
 
-aw.Destroyed=true
 StopBackgroundBlur()
 
 task.wait(0.4)
