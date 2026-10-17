@@ -4941,11 +4941,15 @@ return true
 end
 
 function ae.CreateConfig(af,ag,ah)
+local configuredAutoLoad=ad and ad.AutoLoad
+if type(configuredAutoLoad)=="table"then
+configuredAutoLoad=configuredAutoLoad.Name or configuredAutoLoad.name or configuredAutoLoad.Config or configuredAutoLoad.config
+end
 local ai={
 Path=ae.Path..ag..".json",
 Elements={},
 CustomData={},
-AutoLoad=ah or false,
+AutoLoad=ah==true or(configuredAutoLoad~=nil and tostring(configuredAutoLoad)==tostring(ag)),
 Version=1.2,
 }
 
@@ -14720,24 +14724,6 @@ end
 function aw.SetCurrentConfig(C,F)
 aw.CurrentConfig=F
 end
-task.defer(function()
-task.wait(0.1)
-if aw.Destroyed or not aw.ConfigManager or aw.AutoLoad==nil then return end
-local autoLoadName
-if type(aw.AutoLoad)=="string"then
- autoLoadName=aw.AutoLoad
-elseif type(aw.AutoLoad)=="table"then
- autoLoadName=aw.AutoLoad.Name or aw.AutoLoad.name or aw.AutoLoad.Config or aw.AutoLoad.config
-end
-if not autoLoadName or tostring(autoLoadName)==""then
-warn("[ WindUI.ConfigManager ] AutoLoad requires a config name, for example AutoLoad = 'MainConfig'.")
-return
-end
-local autoConfig,autoError=aw.ConfigManager:CreateConfig(tostring(autoLoadName),true)
-if not autoConfig then
-warn("[ WindUI.ConfigManager ] Failed to create AutoLoad config '"..tostring(autoLoadName).."': "..tostring(autoError))
-end
-end)
 
 do
 local C=40
