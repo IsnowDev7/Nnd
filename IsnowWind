@@ -5390,7 +5390,7 @@ Parent=al,
 ac("UICorner",{CornerRadius=UDim.new(1,0)}),
 })
 local leftButton=ac("ImageButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=ab.Icon("bell")[1],ImageRectSize=ab.Icon("bell")[2].ImageRectSize,ImageRectOffset=ab.Icon("bell")[2].ImageRectPosition,ThemeTag={ImageColor3="Icon"},ZIndex=101,Parent=leftCircle})
-local rightButton=ac("ImageButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=ab.Icon("trash-2")[1],ImageRectSize=ab.Icon("trash-2")[2].ImageRectSize,ImageRectOffset=ab.Icon("trash-2")[2].ImageRectPosition,ThemeTag={ImageColor3="Icon"},ZIndex=101,Parent=rightCircle})
+local rightButton=ac("ImageButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=ab.Icon("trash")[1],ImageRectSize=ab.Icon("trash")[2].ImageRectSize,ImageRectOffset=ab.Icon("trash")[2].ImageRectPosition,ThemeTag={ImageColor3="Icon"},ZIndex=101,Parent=rightCircle})
 local historyPanel=ab.NewRoundFrame(18,"Squircle",{Name="NotificationHistoryPanel",Visible=false,Size=UDim2.fromOffset(292,250),Position=UDim2.new(0,-48,1,10),BackgroundTransparency=0,ZIndex=120,Parent=al},{ac("UIListLayout",{Padding=UDim.new(0,6),SortOrder=Enum.SortOrder.LayoutOrder,Parent=nil}),ac("UIPadding",{PaddingTop=UDim.new(0,12),PaddingBottom=UDim.new(0,12),PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})})
 local historyLayout=historyPanel:FindFirstChildOfClass("UIListLayout")
 if historyLayout then historyLayout.Parent=historyPanel end
@@ -15188,58 +15188,6 @@ N:Open()
 return N
 end
 
-
-function aw.Discord(C,J)
- C=C or{}
- J=J or{}
- local invite=tostring(C.Invite or C.invite or C.Link or C.link or'AK4ufAfxYD')
- invite=invite:gsub('https?://discord%.gg/',''):gsub('/.*$',''):gsub('%s+','')
- local panel=ao('Frame',{Name='DiscordPanel',Size=UDim2.fromOffset(C.Width or 360,118),Position=C.Position or UDim2.new(0.5,0,0,58),AnchorPoint=Vector2.new(0.5,0),BackgroundTransparency=0,ZIndex=40,Parent=C.Parent or aw.UIElements.Main.Main},{ao('UICorner',{CornerRadius=UDim.new(0,14)}),ao('UIStroke',{Thickness=1,Transparency=.72,ThemeTag={Color='Text'}})})
- local icon=ao('ImageLabel',{Name='ServerIcon',Size=UDim2.fromOffset(64,64),Position=UDim2.new(0,14,0,14),BackgroundTransparency=1,ImageTransparency=.2,ScaleType=Enum.ScaleType.Crop,ZIndex=41,Parent=panel})
- ao('UICorner',{CornerRadius=UDim.new(1,0),Parent=icon})
- local name=ao('TextLabel',{Text='Discord Server',Size=UDim2.new(1,-170,0,24),Position=UDim2.new(0,92,0,16),BackgroundTransparency=1,TextXAlignment='Left',TextSize=18,FontFace=Font.new(an.Font,Enum.FontWeight.SemiBold),ThemeTag={TextColor3='Text'},ZIndex=41,Parent=panel})
- local counts=ao('TextLabel',{Text='Loading members...',Size=UDim2.new(1,-170,0,22),Position=UDim2.new(0,92,0,43),BackgroundTransparency=1,TextXAlignment='Left',TextSize=14,TextTransparency=.25,FontFace=Font.new(an.Font,Enum.FontWeight.Medium),ThemeTag={TextColor3='Text'},ZIndex=41,Parent=panel})
- local copy=ao('TextButton',{Text='Copy Invite',Size=UDim2.fromOffset(112,30),Position=UDim2.new(1,-14,1,-14),AnchorPoint=Vector2.new(1,1),BackgroundTransparency=0,TextSize=14,FontFace=Font.new(an.Font,Enum.FontWeight.SemiBold),ZIndex=42,Parent=panel},{ao('UICorner',{CornerRadius=UDim.new(0,9)}),ao('UIStroke',{Thickness=1,Transparency=.65,ThemeTag={Color='Text'}})})
- local status=ao('TextLabel',{Text='',Size=UDim2.new(1,-140,0,18),Position=UDim2.new(0,14,1,-27),BackgroundTransparency=1,TextXAlignment='Left',TextSize=12,TextTransparency=.35,FontFace=Font.new(an.Font,Enum.FontWeight.Medium),ThemeTag={TextColor3='Text'},ZIndex=41,Parent=panel})
- local data={Panel=panel,Invite=invite,Destroyed=false}
- local httpRequest=request or http_request or (syn and syn.request)
- local function fetchBody(url)
-  local fn=httpRequest
-  if fn then
-   local ok,response=pcall(fn,{Url=url,Method='GET'})
-   if ok and response and response.Body then return response.Body end
-  end
-  local ok,body=pcall(function()return game:HttpGet(url)end)
-  if ok then return body end
- end
- local function loadIcon(url)
-  local ok,image=pcall(function()return an.Image(url,name.Text..':discord',0,aw,'DiscordPanel',true,false)end)
-  if ok and image then image.Size=UDim2.fromOffset(64,64)image.Parent=icon.Parent image.Position=icon.Position image.AnchorPoint=icon.AnchorPoint icon:Destroy()icon=image ao('UICorner',{CornerRadius=UDim.new(1,0),Parent=image})end
- end
- function data:Refresh()
-  task.spawn(function()
-   local body=fetchBody('https://discord.com/api/v10/invites/'..invite..'?with_counts=true')
-   if not body then counts.Text='Unable to load Discord data.' return end
-   local ok,result=pcall(function()return game:GetService('HttpService'):JSONDecode(body)end)
-   if not ok or type(result)~='table' or not result.guild then counts.Text='Invalid or unavailable invite.' return end
-   local guild=result.guild
-   name.Text=tostring(guild.name or'Discord Server')
-   counts.Text=tostring(result.approximate_presence_count or 0)..' active  |  '..tostring(result.approximate_member_count or 0)..' members'
-   status.Text='discord.gg/'..invite
-   if guild.icon then loadIcon('https://cdn.discordapp.com/icons/'..tostring(guild.id)..'/'..tostring(guild.icon)..'.png?size=128')end
-  end)
- end
- ao.AddSignal(copy.MouseButton1Click,function()
-  local link='https://discord.gg/'..invite
-  if setclipboard then pcall(setclipboard,link)elseif toclipboard then pcall(toclipboard,link)end
-  copy.Text='Copied!'
-  task.delay(1.4,function()if copy and copy.Parent then copy.Text='Copy Invite'end end)
- end)
- function data:Destroy()self.Destroyed=true if self.Panel then self.Panel:Destroy()end end
- aw.DiscordPanel=data
- data:Refresh()
- return data
-end
 
 local J=false
 
