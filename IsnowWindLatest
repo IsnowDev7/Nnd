@@ -5130,25 +5130,10 @@ if isfile(ai.Path)then
 local aj,ak=pcall(function()
 return ac:JSONDecode(readfile(ai.Path))
 end)
-
 if aj and ak and ak.__autoload then
 ai.AutoLoad=true
-
-task.spawn(function()
-task.wait(0.5)
-local al,am=pcall(function()
-return ai:Load()
-end)
-if al then
-if ad.Debug then print("[ WindUI.ConfigManager ] AutoLoaded config: "..ag)end
-else
-warn("[ WindUI.ConfigManager ] Failed to AutoLoad config: "..ag.." - "..tostring(am))
-end
-end)
 end
 end
-
-
 ai:SetAsCurrent()
 ae.Configs[ag]=ai
 return ai
@@ -15873,6 +15858,13 @@ local h=aB(aA)
 
 aa.Transparent=aA.Transparent
 aa.Window=h
+
+if h.AutoLoad and h.ConfigManager and h.CurrentConfig then
+local autoLoadOk,autoLoadError=pcall(function()
+h.CurrentConfig:Load()
+end)
+if not autoLoadOk then warn("[ WindUI.ConfigManager ] AutoLoad failed: "..tostring(autoLoadError))end
+end
 
 if aA.Acrylic then
 au.init()
