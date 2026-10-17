@@ -1707,6 +1707,9 @@ Closed=false,
 
 f.NotificationIndex=f.NotificationIndex+1
 f.Notifications[f.NotificationIndex]=h
+if g.Window and g.Window.OpenButtonMain and g.Window.OpenButtonMain.AddNotification then
+ g.Window.OpenButtonMain:AddNotification(h.Title,h.Content,h.Icon)
+end
 
 
 
@@ -5311,7 +5314,7 @@ Size=UDim2.new(0,0,0,44),
 AutomaticSize="X",
 Parent=al,
 Active=false,
-BackgroundTransparency=.25,
+BackgroundTransparency=0,
 ZIndex=99,
 BackgroundColor3=Color3.new(0,0,0),
 },{
@@ -5319,15 +5322,9 @@ am,
 ac("UICorner",{
 CornerRadius=UDim.new(1,0)
 }),
-ac("UIStroke",{
-Thickness=1,
-ApplyStrokeMode="Border",
-Color=Color3.new(1,1,1),
-Transparency=0,
-},{
 ac("UIGradient",{
-Color=ColorSequence.new(Color3.fromHex"40c9ff",Color3.fromHex"e81cff")
-})
+Color=ColorSequence.new(Color3.fromHex"40c9ff",Color3.fromHex"e81cff"),
+Rotation=0,
 }),
 aj,
 ak,
@@ -5368,6 +5365,79 @@ PaddingRight=UDim.new(0,4),
 })
 
 ag.Button=an
+local leftCircle=ac("Frame",{
+Name="NotificationHistoryButton",
+Size=UDim2.fromOffset(36,36),
+Position=UDim2.new(0,-44,0.5,0),
+AnchorPoint=Vector2.new(0,0.5),
+BackgroundColor3=Color3.new(0,0,0),
+BackgroundTransparency=0,
+ZIndex=100,
+Parent=al,
+},{
+ac("UICorner",{CornerRadius=UDim.new(1,0)}),
+})
+local rightCircle=ac("Frame",{
+Name="CloseWindowButton",
+Size=UDim2.fromOffset(36,36),
+Position=UDim2.new(1,8,0.5,0),
+AnchorPoint=Vector2.new(0,0.5),
+BackgroundColor3=Color3.new(0,0,0),
+BackgroundTransparency=0,
+ZIndex=100,
+Parent=al,
+},{
+ac("UICorner",{CornerRadius=UDim.new(1,0)}),
+})
+local leftButton=ac("ImageButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=ab.Icon("bell")[1],ImageRectSize=ab.Icon("bell")[2].ImageRectSize,ImageRectOffset=ab.Icon("bell")[2].ImageRectPosition,ThemeTag={ImageColor3="Icon"},ZIndex=101,Parent=leftCircle})
+local rightButton=ac("ImageButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=ab.Icon("trash-2")[1],ImageRectSize=ab.Icon("trash-2")[2].ImageRectSize,ImageRectOffset=ab.Icon("trash-2")[2].ImageRectPosition,ThemeTag={ImageColor3="Icon"},ZIndex=101,Parent=rightCircle})
+local historyPanel=ab.NewRoundFrame(18,"Squircle",{Name="NotificationHistoryPanel",Visible=false,Size=UDim2.fromOffset(292,250),Position=UDim2.new(0,-48,1,10),BackgroundTransparency=0,ZIndex=120,Parent=al},{ac("UIListLayout",{Padding=UDim.new(0,6),SortOrder=Enum.SortOrder.LayoutOrder,Parent=nil}),ac("UIPadding",{PaddingTop=UDim.new(0,12),PaddingBottom=UDim.new(0,12),PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})})
+local historyLayout=historyPanel:FindFirstChildOfClass("UIListLayout")
+if historyLayout then historyLayout.Parent=historyPanel end
+local historyItems={}
+local function refreshHistory()
+ for _,item in next,historyItems do item:Destroy()end
+ table.clear(historyItems)
+ local title=ac("TextLabel",{Text="Notification History",AutomaticSize="Y",Size=UDim2.new(1,0,0,0),BackgroundTransparency=1,TextXAlignment="Left",TextSize=17,FontFace=Font.new(ab.Font,Enum.FontWeight.SemiBold),ThemeTag={TextColor3="Text"},Parent=historyPanel})
+ table.insert(historyItems,title)
+ if #ag.NotificationHistory==0 then
+  local empty=ac("TextLabel",{Text="No notifications yet.",AutomaticSize="Y",Size=UDim2.new(1,0,0,0),BackgroundTransparency=1,TextXAlignment="Left",TextSize=14,TextTransparency=.35,FontFace=Font.new(ab.Font,Enum.FontWeight.Medium),ThemeTag={TextColor3="Text"},Parent=historyPanel})
+  table.insert(historyItems,empty)
+ else
+  for index=math.max(1,#ag.NotificationHistory-9),#ag.NotificationHistory do
+   local itemData=ag.NotificationHistory[index]
+   local item=ac("TextLabel",{Text=tostring(itemData.Title).."\n"..tostring(itemData.Content or""),AutomaticSize="Y",Size=UDim2.new(1,0,0,0),BackgroundTransparency=1,TextWrapped=true,TextXAlignment="Left",TextSize=14,FontFace=Font.new(ab.Font,Enum.FontWeight.Medium),ThemeTag={TextColor3="Text"},Parent=historyPanel})
+   table.insert(historyItems,item)
+  end
+ end
+end
+ag.NotificationHistory={}
+function ag.AddNotification(ao,ap,aq)
+ table.insert(ag.NotificationHistory,{Title=ao,Content=ap,Icon=aq,Time=os.time()})
+ if #ag.NotificationHistory>50 then table.remove(ag.NotificationHistory,1)end
+ if historyPanel.Visible then refreshHistory()end
+end
+local function toggleHistory()
+ historyPanel.Visible=not historyPanel.Visible
+ if historyPanel.Visible then refreshHistory()end
+end
+ab.AddSignal(leftButton.MouseButton1Click,toggleHistory)
+local function showCloseDialog()
+ if not af.Dialog or af.Destroyed then return end
+ af:Dialog{Title="Close Window ?",Content="This action cannot be canceled.",Buttons={{Title="No",Variant="Secondary"},{Title="Yes",Variant="Danger",Callback=function()af:Destroy()end}}}
+end
+ab.AddSignal(rightButton.MouseButton1Click,function()
+ if af.Closed then
+  af:Open()
+  task.delay(.45,showCloseDialog)
+ else
+  showCloseDialog()
+ end
+end)
+function ag.SetOpenButtonCirclesVisible(ao,ap)
+ leftCircle.Visible=ap
+ rightCircle.Visible=ap
+end
 
 
 
@@ -5405,10 +5475,16 @@ al.Size=UDim2.new(
 end)
 
 ab.AddSignal(an.TextButton.MouseEnter,function()
-ad(an.TextButton,.1,{BackgroundTransparency=.93}):Play()
+ad(am,.15,{Scale=1.04},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 end)
 ab.AddSignal(an.TextButton.MouseLeave,function()
-ad(an.TextButton,.1,{BackgroundTransparency=1}):Play()
+ad(am,.2,{Scale=1},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
+end)
+ab.AddSignal(an.TextButton.MouseButton1Down,function()
+ad(am,.12,{Scale=1.09},Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()
+end)
+ab.AddSignal(an.TextButton.MouseButton1Up,function()
+ad(am,.2,{Scale=1},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 end)
 
 local ao=ab.Drag(al)
@@ -5432,7 +5508,6 @@ OnlyIcon=aq.OnlyIcon or false,
 Draggable=aq.Draggable or nil,
 OnlyMobile=aq.OnlyMobile,
 CornerRadius=aq.CornerRadius or UDim.new(1,0),
-StrokeThickness=aq.StrokeThickness or 2,
 Scale=aq.Scale or 1,
 Color=aq.Color
 or ColorSequence.new(Color3.fromHex"40c9ff",Color3.fromHex"e81cff"),
@@ -5491,14 +5566,9 @@ if ar.Icon then
 ag:SetIcon(ar.Icon)
 end
 
-an.UIStroke.UIGradient.Color=ar.Color
-if Glow then
-Glow.UIGradient.Color=ar.Color
-end
 
 an.UICorner.CornerRadius=ar.CornerRadius
 an.TextButton.UICorner.CornerRadius=UDim.new(ar.CornerRadius.Scale,ar.CornerRadius.Offset-4)
-an.UIStroke.Thickness=ar.StrokeThickness
 
 ag:SetScale(ar.Scale)
 end
@@ -14510,6 +14580,7 @@ end
 
 if aw.OpenButtonMain and aw.IsOpenButtonEnabled then
 aw.OpenButtonMain:Visible(false)
+aw.OpenButtonMain:SetOpenButtonCirclesVisible(false)
 end
 
 
@@ -14650,6 +14721,7 @@ aw.UIElements.Main.Visible=false
 
 if aw.OpenButtonMain and not aw.Destroyed and not aw.IsPC and aw.IsOpenButtonEnabled then
 aw.OpenButtonMain:Visible(true)
+aw.OpenButtonMain:SetOpenButtonCirclesVisible(true)
 end
 end)
 
